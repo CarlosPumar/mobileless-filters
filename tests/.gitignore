@@ -3,3 +3,5 @@ auth.json
 playwright-report/
 test-results/
 login-failed.png
+before-login.png
+cookie-dialog-stuck.png
