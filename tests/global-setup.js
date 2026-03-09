@@ -36,53 +36,64 @@ module.exports = async () => {
     waitUntil: 'networkidle',
   });
 
-  // Take a screenshot so we can debug what Instagram is showing
+  // -- Step 1: Dismiss cookie consent dialog (shown in fresh sessions) --
+  try {
+    const cookieBtn = page.locator('div[role="button"]')
+      .filter({ hasText: /allow all cookies/i })
+      .first();
+    await cookieBtn.click({ timeout: 8_000 });
+    console.log('[setup] Cookie dialog dismissed.');
+    await page.waitForTimeout(1_500);
+  } catch {
+    // Dialog not shown — fine
+  }
+
+  // Screenshot after dismissing cookie dialog
   await page.screenshot({ path: path.join(__dirname, 'before-login.png') });
 
-  // Wait for the username field to be visible (guards against slow loads)
-  // Instagram uses type="email" for the username field
+  // -- Step 2: Fill credentials --
   await page.waitForSelector('input[name="username"]', { timeout: 20_000 });
-
-  // Fill credentials
   await page.fill('input[name="username"]', username);
   await page.fill('input[name="password"]', password);
 
   // Small pause so Instagram enables the submit button
   await page.waitForTimeout(500);
 
-  // Instagram uses <div role="button"> instead of <button> for the login submit.
-  // Try multiple selectors in order of specificity.
-  const submitSelectors = [
-    'div[role="button"]:has-text("Log in")',
-    'div[role="button"]:has-text("Iniciar sesión")',
-    'div[role="button"]:has-text("Log In")',
-    'button[type="submit"]',
-    'button:has-text("Log in")',
-    'button:has-text("Iniciar sesión")',
-    'form button',
-    'div[role="button"]',
-  ];
+  // -- Step 3: Click the login button --
+  // Instagram uses <div role="button"> not <button> — use locator().filter() for hasText
   let clicked = false;
-  for (const selector of submitSelectors) {
+
+  const loginTexts = ['Log in', 'Log In', 'Iniciar sesión', 'Entrar', 'Connexion'];
+  for (const text of loginTexts) {
     try {
-      await page.click(selector, { timeout: 5_000 });
+      await page.locator('div[role="button"]').filter({ hasText: text }).first().click({ timeout: 5_000 });
       clicked = true;
-      console.log(`[setup] Clicked submit button with selector: ${selector}`);
+      console.log(`[setup] Clicked login button with text: "${text}"`);
       break;
     } catch {
-      // Try next selector
+      // Try next
     }
   }
+
+  // Fallback: standard <button type="submit">
   if (!clicked) {
-    await page.screenshot({ path: path.join(__dirname, 'login-failed.png') });
-    await browser.close();
-    throw new Error(
-      '[setup] Could not find the submit button on the Instagram login page.\n' +
-      'Instagram may have changed its login form. Check before-login.png and login-failed.png.'
-    );
+    try {
+      await page.locator('button[type="submit"]').first().click({ timeout: 5_000 });
+      clicked = true;
+      console.log('[setup] Clicked button[type="submit"] fallback.');
+    } catch {
+      // Try next
+    }
   }
 
-  // Wait to leave the login page (redirect to feed or "save info" prompt)
+  // Last resort: press Enter
+  if (!clicked) {
+    await page.locator('input[name="password"]').press('Enter');
+    clicked = true;
+    console.log('[setup] Submitted via Enter key.');
+  }
+
+  // -- Step 4: Wait for redirect away from login page --
   try {
     await page.waitForURL(
       (url) => !url.toString().includes('/accounts/login'),
@@ -98,22 +109,23 @@ module.exports = async () => {
     );
   }
 
-  // Dismiss "Save your login info?" prompt if it appears
+  // -- Step 5: Dismiss post-login prompts --
+  // "Save your login info?" prompt
   try {
-    await page.click('button:has-text("Not now")', { timeout: 5_000 });
+    await page.locator('div[role="button"]').filter({ hasText: /not now/i }).first().click({ timeout: 5_000 });
   } catch {
     // Not shown — fine
   }
 
-  // Dismiss "Turn on notifications?" prompt if it appears
+  // "Turn on notifications?" prompt
   try {
-    await page.click('button:has-text("Not now")', { timeout: 5_000 });
+    await page.locator('div[role="button"]').filter({ hasText: /not now/i }).first().click({ timeout: 5_000 });
   } catch {
     // Not shown — fine
   }
 
   await context.storageState({ path: AUTH_FILE });
-  console.log(`[setup] Logged in. Session saved to auth.json`);
+  console.log('[setup] Logged in. Session saved to auth.json');
 
   await browser.close();
 };
