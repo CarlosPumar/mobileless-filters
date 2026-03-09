@@ -36,10 +36,43 @@ module.exports = async () => {
     waitUntil: 'networkidle',
   });
 
+  // Take a screenshot so we can debug what Instagram is showing
+  await page.screenshot({ path: path.join(__dirname, 'before-login.png') });
+
+  // Wait for the username field to be visible (guards against slow loads)
+  await page.waitForSelector('input[name="username"]', { timeout: 20_000 });
+
   // Fill credentials
   await page.fill('input[name="username"]', username);
   await page.fill('input[name="password"]', password);
-  await page.click('button[type="submit"]');
+
+  // Try multiple selectors for the submit button — Instagram changes these often
+  const submitSelectors = [
+    'button[type="submit"]',
+    'button:has-text("Log in")',
+    'button:has-text("Iniciar sesión")',
+    'button:has-text("Log In")',
+    'form button',
+  ];
+  let clicked = false;
+  for (const selector of submitSelectors) {
+    try {
+      await page.click(selector, { timeout: 5_000 });
+      clicked = true;
+      console.log(`[setup] Clicked submit button with selector: ${selector}`);
+      break;
+    } catch {
+      // Try next selector
+    }
+  }
+  if (!clicked) {
+    await page.screenshot({ path: path.join(__dirname, 'login-failed.png') });
+    await browser.close();
+    throw new Error(
+      '[setup] Could not find the submit button on the Instagram login page.\n' +
+      'Instagram may have changed its login form. Check before-login.png and login-failed.png.'
+    );
+  }
 
   // Wait to leave the login page (redirect to feed or "save info" prompt)
   try {
