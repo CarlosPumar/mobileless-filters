@@ -76,11 +76,25 @@ module.exports = async () => {
 
   console.log(`[setup] Logging in as ${username}…`);
 
+  // Use domcontentloaded to avoid hanging on Instagram's background requests
   await page.goto('https://www.instagram.com/accounts/login/', {
-    waitUntil: 'networkidle',
+    waitUntil: 'domcontentloaded',
+    timeout: 30_000,
   });
 
-  // -- Step 1: Dismiss cookie consent page (if present) --
+  // -- Step 1: Wait for EITHER the cookie consent OR the username input --
+  // Instagram sometimes renders the cookie consent in front of the login form,
+  // or it renders the form immediately. Race both possibilities.
+  try {
+    await Promise.race([
+      page.waitForSelector('button:text-matches("allow all cookies", "i")', { timeout: 15_000 }),
+      page.waitForSelector('input[name="username"]', { timeout: 15_000 }),
+    ]);
+  } catch {
+    // Neither appeared quickly — screenshot for diagnostics and proceed anyway
+    console.log('[setup] Neither cookie consent nor username field appeared quickly.');
+  }
+
   await dismissCookieConsent(page);
   await page.waitForTimeout(500);
 
@@ -90,7 +104,17 @@ module.exports = async () => {
   // -- Step 2: Fill credentials --
   // Instagram's username field has type="email" which causes browser-level
   // validation to reject plain usernames. Change to "text" before filling.
-  await page.waitForSelector('input[name="username"]', { timeout: 20_000 });
+  try {
+    await page.waitForSelector('input[name="username"]', { timeout: 15_000 });
+  } catch {
+    await page.screenshot({ path: path.join(__dirname, 'login-failed.png') });
+    await browser.close();
+    throw new Error(
+      '[setup] Username field not found after cookie consent handling.\n' +
+      'Screenshot saved to tests/login-failed.png.\n' +
+      'Instagram may have changed its login page structure.'
+    );
+  }
   await page.evaluate(() => {
     document.querySelector('input[name="username"]').type = 'text';
   });
@@ -165,7 +189,8 @@ module.exports = async () => {
   // here ensures the consent cookie is included in the saved storageState, so tests
   // don't get blocked by the consent page when they navigate to instagram.com.
   console.log('[setup] Navigating to feed to accept cookies for test sessions…');
-  await page.goto('https://www.instagram.com/', { waitUntil: 'networkidle' });
+  await page.goto('https://www.instagram.com/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  await page.waitForTimeout(2_000);
   await dismissCookieConsent(page);
   await page.waitForTimeout(1_000);
 
