@@ -40,19 +40,27 @@ module.exports = async () => {
   await page.screenshot({ path: path.join(__dirname, 'before-login.png') });
 
   // Wait for the username field to be visible (guards against slow loads)
+  // Instagram uses type="email" for the username field
   await page.waitForSelector('input[name="username"]', { timeout: 20_000 });
 
   // Fill credentials
   await page.fill('input[name="username"]', username);
   await page.fill('input[name="password"]', password);
 
-  // Try multiple selectors for the submit button — Instagram changes these often
+  // Small pause so Instagram enables the submit button
+  await page.waitForTimeout(500);
+
+  // Instagram uses <div role="button"> instead of <button> for the login submit.
+  // Try multiple selectors in order of specificity.
   const submitSelectors = [
+    'div[role="button"]:has-text("Log in")',
+    'div[role="button"]:has-text("Iniciar sesión")',
+    'div[role="button"]:has-text("Log In")',
     'button[type="submit"]',
     'button:has-text("Log in")',
     'button:has-text("Iniciar sesión")',
-    'button:has-text("Log In")',
     'form button',
+    'div[role="button"]',
   ];
   let clicked = false;
   for (const selector of submitSelectors) {
