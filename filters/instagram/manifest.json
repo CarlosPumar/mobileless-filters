@@ -1,0 +1,30 @@
+{
+  "androidPackage": "com.instagram.android",
+  "iosBundleId": "com.burbn.instagram",
+  "appName": "Instagram",
+  "url": "https://www.instagram.com",
+  "baselineJs": "baseline.js",
+  "filters": [
+    {
+      "id": "ig_stories",
+      "nameKey": "filter_ig_stories",
+      "js": "ig_stories.js"
+    },
+    {
+      "id": "ig_reels",
+      "nameKey": "filter_ig_reels",
+      "js": "ig_reels.js",
+      "css": "ig_reels.css"
+    },
+    {
+      "id": "ig_explore",
+      "nameKey": "filter_ig_explore",
+      "css": "ig_explore.css"
+    },
+    {
+      "id": "ig_no_scroll_reels",
+      "nameKey": "filter_ig_no_scroll_reels",
+      "js": "ig_no_scroll_reels.js"
+    }
+  ]
+}
