@@ -42,9 +42,9 @@ test.describe('ig_reels filter', () => {
     // Wait for feed to load
     await page.waitForSelector('article', { timeout: 20_000 });
 
-    // Inject JS
+    // Inject JS (wrap in IIFE so multi-statement JS works as an expression)
     const js = fs.readFileSync(JS_FILE, 'utf-8');
-    await page.evaluate(js);
+    await page.evaluate(`(function(){\n${js}\n})()`);
 
     // Wait for setInterval to run
     await page.waitForTimeout(2_000);

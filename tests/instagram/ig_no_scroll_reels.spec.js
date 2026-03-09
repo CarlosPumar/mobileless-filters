@@ -22,9 +22,9 @@ test.describe('ig_no_scroll_reels filter', () => {
     // Wait for a video to appear (confirms reels content loaded)
     await page.waitForSelector('video', { timeout: 30_000 });
 
-    // Inject the filter
+    // Inject the filter (wrap in IIFE so multi-statement JS works as an expression)
     const js = fs.readFileSync(JS_FILE, 'utf-8');
-    await page.evaluate(js);
+    await page.evaluate(`(function(){\n${js}\n})()`);
 
     // Give the setInterval (500ms) time to find and lock the container
     await page.waitForTimeout(2_000);

@@ -36,22 +36,22 @@ async function dismissCookieConsent(page) {
   console.log('[setup] Cookie consent page detected — dismissing…');
   await allowBtn.click();
 
-  // Wait for the button to disappear, which signals that the login form has rendered
+  // Wait for the button to disappear — signals the page re-rendered past the consent
   try {
     await allowBtn.waitFor({ state: 'hidden', timeout: 10_000 });
     console.log('[setup] Cookie consent dismissed.');
   } catch {
-    // It might already be gone due to a re-render — check if login form is now visible
-    const usernameInput = page.locator('input[name="username"]');
-    const loginVisible = await usernameInput.isVisible().catch(() => false);
-    if (!loginVisible) {
+    // The button might have been replaced by a new render — just wait a bit and continue
+    await page.waitForTimeout(2_000);
+    const stillVisible = await allowBtn.isVisible().catch(() => false);
+    if (stillVisible) {
       await page.screenshot({ path: path.join(__dirname, 'cookie-dialog-stuck.png') });
       throw new Error(
         '[setup] Cookie consent could not be dismissed.\n' +
         'Screenshot saved to tests/cookie-dialog-stuck.png.'
       );
     }
-    console.log('[setup] Cookie consent dismissed (login form now visible).');
+    console.log('[setup] Cookie consent dismissed (page re-rendered).');
   }
 
   return true;
@@ -159,6 +159,15 @@ module.exports = async () => {
       // Not shown — fine
     }
   }
+
+  // -- Step 6: Accept cookies on the feed so the cookie is stored in auth.json --
+  // The cookie consent appears again on every page in a fresh session. Accepting it
+  // here ensures the consent cookie is included in the saved storageState, so tests
+  // don't get blocked by the consent page when they navigate to instagram.com.
+  console.log('[setup] Navigating to feed to accept cookies for test sessions…');
+  await page.goto('https://www.instagram.com/', { waitUntil: 'networkidle' });
+  await dismissCookieConsent(page);
+  await page.waitForTimeout(1_000);
 
   await context.storageState({ path: AUTH_FILE });
   console.log('[setup] Logged in. Session saved to auth.json');

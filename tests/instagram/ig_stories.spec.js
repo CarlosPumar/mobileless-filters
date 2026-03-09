@@ -18,30 +18,23 @@ test.describe('ig_stories filter', () => {
   test('stories tray is visible on home feed before injection', async ({ page }) => {
     await page.goto('/', { waitUntil: 'networkidle' });
 
-    // The tray is a horizontally-scrollable container near the top
-    const storyTray = page.locator('div').filter(async (el) => {
-      const style = await el.evaluate((node) => {
-        const cs = window.getComputedStyle(node);
-        const rect = node.getBoundingClientRect();
-        const buttons = node.querySelectorAll('[role="button"]');
-        return {
-          overflowX: cs.overflowX,
-          top: rect.top,
-          height: rect.height,
-          buttonCount: buttons.length,
-        };
-      });
-      return (
-        (style.overflowX === 'auto' || style.overflowX === 'scroll') &&
-        style.top >= 0 &&
-        style.top <= 200 &&
-        style.height >= 80 &&
-        style.height <= 200 &&
-        style.buttonCount >= 3
-      );
-    }).first();
+    // Detect the stories tray using evaluate (same logic as the filter script)
+    const trayFound = await page.evaluate(() => {
+      const divs = document.querySelectorAll('div');
+      for (const div of divs) {
+        const cs = window.getComputedStyle(div);
+        if (cs.overflowX !== 'auto' && cs.overflowX !== 'scroll') continue;
+        const rect = div.getBoundingClientRect();
+        if (rect.top > 200 || rect.top < -10) continue;
+        if (rect.height < 80 || rect.height > 200) continue;
+        const buttons = div.querySelectorAll('[role="button"]');
+        if (buttons.length < 3) continue;
+        return true;
+      }
+      return false;
+    });
 
-    await expect(storyTray).toBeVisible({ timeout: 20_000 });
+    expect(trayFound).toBe(true);
   });
 
   test('stories tray is hidden after JS injection', async ({ page }) => {
@@ -65,9 +58,9 @@ test.describe('ig_stories filter', () => {
 
     expect(trayBefore.found).toBe(true);
 
-    // Inject filter
+    // Inject filter (wrap in IIFE so multi-statement JS works as an expression)
     const js = fs.readFileSync(JS_FILE, 'utf-8');
-    await page.evaluate(js);
+    await page.evaluate(`(function(){\n${js}\n})()`);
     await page.waitForTimeout(2_500); // let setInterval run
 
     // Now the tray should be hidden
