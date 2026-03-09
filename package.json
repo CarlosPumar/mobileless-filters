@@ -1,0 +1,12 @@
+{
+  "name": "mobileless-filters",
+  "private": true,
+  "workspaces": [
+    "tests"
+  ],
+  "scripts": {
+    "test": "npm run test --workspace=tests",
+    "test:headed": "npm run test:headed --workspace=tests",
+    "test:report": "npm run test:report --workspace=tests"
+  }
+}
