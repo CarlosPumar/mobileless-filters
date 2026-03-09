@@ -52,7 +52,12 @@ module.exports = async () => {
   await page.screenshot({ path: path.join(__dirname, 'before-login.png') });
 
   // -- Step 2: Fill credentials --
+  // Instagram sets the username field as type="email" which causes browser validation
+  // to reject plain usernames. Change it to "text" before filling to bypass this.
   await page.waitForSelector('input[name="username"]', { timeout: 20_000 });
+  await page.evaluate(() => {
+    document.querySelector('input[name="username"]').type = 'text';
+  });
   await page.fill('input[name="username"]', username);
   await page.fill('input[name="password"]', password);
 
