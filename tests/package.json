@@ -1,0 +1,13 @@
+{
+  "name": "mobileless-filters-tests",
+  "version": "1.0.0",
+  "description": "Playwright tests to verify that Instagram filter scripts work on the live site",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.42.0"
+  }
+}
