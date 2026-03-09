@@ -14,61 +14,47 @@ const path = require('path');
 const AUTH_FILE = path.join(__dirname, 'auth.json');
 
 /**
- * Dismiss the Instagram cookie consent dialog if it's present.
- * Tries up to maxAttempts times, waiting between each try.
- * Returns true if dismissed, false if not shown.
+ * Dismiss the Instagram cookie consent page if it's present.
+ *
+ * The cookie consent is NOT a <dialog> — it is a full-page section rendered
+ * at the same URL as the login form. The buttons are standard <button> elements.
+ * After clicking "Allow all cookies", Instagram re-renders the login form
+ * in-place (same URL, no redirect).
+ *
+ * Returns true if the consent page was found and dismissed, false otherwise.
  */
-async function dismissCookieDialog(page, maxAttempts = 5) {
-  for (let i = 0; i < maxAttempts; i++) {
-    // Check if the cookie dialog is visible right now
-    const dialog = page.locator('div[role="dialog"]');
-    const isVisible = await dialog.isVisible().catch(() => false);
+async function dismissCookieConsent(page) {
+  // Detect by presence of the "Allow all cookies" <button>
+  const allowBtn = page.locator('button').filter({ hasText: /allow all cookies/i }).first();
 
-    if (!isVisible) {
-      // No dialog — either already dismissed or never appeared
-      console.log(`[setup] No cookie dialog visible (attempt ${i + 1}).`);
-      return false;
-    }
-
-    console.log(`[setup] Cookie dialog detected (attempt ${i + 1}), trying to dismiss…`);
-
-    // Try clicking "Allow all cookies" inside the dialog
-    const allowBtn = dialog.locator('div[role="button"]')
-      .filter({ hasText: /allow all cookies/i })
-      .first();
-    const declineBtn = dialog.locator('div[role="button"]')
-      .filter({ hasText: /decline/i })
-      .first();
-
-    const allowVisible = await allowBtn.isVisible().catch(() => false);
-    if (allowVisible) {
-      await allowBtn.click();
-      console.log('[setup] Clicked "Allow all cookies".');
-    } else {
-      const declineVisible = await declineBtn.isVisible().catch(() => false);
-      if (declineVisible) {
-        await declineBtn.click();
-        console.log('[setup] Clicked "Decline optional cookies".');
-      }
-    }
-
-    // Wait for dialog to disappear
-    try {
-      await dialog.waitFor({ state: 'hidden', timeout: 5_000 });
-      console.log('[setup] Cookie dialog dismissed successfully.');
-      return true;
-    } catch {
-      console.log('[setup] Dialog still visible after click, retrying…');
-      await page.waitForTimeout(1_000);
-    }
+  const isVisible = await allowBtn.isVisible().catch(() => false);
+  if (!isVisible) {
+    console.log('[setup] No cookie consent page found — proceeding to login.');
+    return false;
   }
 
-  // If we still have the dialog after all attempts, throw so we know what happened
-  await page.screenshot({ path: path.join(__dirname, 'cookie-dialog-stuck.png') });
-  throw new Error(
-    '[setup] Cookie consent dialog could not be dismissed after multiple attempts.\n' +
-    'Screenshot saved to tests/cookie-dialog-stuck.png.'
-  );
+  console.log('[setup] Cookie consent page detected — dismissing…');
+  await allowBtn.click();
+
+  // Wait for the button to disappear, which signals that the login form has rendered
+  try {
+    await allowBtn.waitFor({ state: 'hidden', timeout: 10_000 });
+    console.log('[setup] Cookie consent dismissed.');
+  } catch {
+    // It might already be gone due to a re-render — check if login form is now visible
+    const usernameInput = page.locator('input[name="username"]');
+    const loginVisible = await usernameInput.isVisible().catch(() => false);
+    if (!loginVisible) {
+      await page.screenshot({ path: path.join(__dirname, 'cookie-dialog-stuck.png') });
+      throw new Error(
+        '[setup] Cookie consent could not be dismissed.\n' +
+        'Screenshot saved to tests/cookie-dialog-stuck.png.'
+      );
+    }
+    console.log('[setup] Cookie consent dismissed (login form now visible).');
+  }
+
+  return true;
 }
 
 module.exports = async () => {
@@ -94,8 +80,8 @@ module.exports = async () => {
     waitUntil: 'networkidle',
   });
 
-  // -- Step 1: Dismiss cookie consent dialog --
-  await dismissCookieDialog(page);
+  // -- Step 1: Dismiss cookie consent page (if present) --
+  await dismissCookieConsent(page);
   await page.waitForTimeout(500);
 
   // Screenshot to confirm we're past the cookie dialog
