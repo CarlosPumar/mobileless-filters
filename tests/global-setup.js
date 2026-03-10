@@ -85,10 +85,14 @@ module.exports = async () => {
   // -- Step 1: Wait for EITHER the cookie consent OR the username input --
   // Instagram sometimes renders the cookie consent in front of the login form,
   // or it renders the form immediately. Race both possibilities.
+  // Instagram has changed the username field name from "username" to "email" —
+  // we try both selectors for forward-compatibility.
+  const usernameSelector = 'input[name="email"], input[name="username"]';
+  const passwordSelector = 'input[name="pass"], input[name="password"]';
   try {
     await Promise.race([
       page.waitForSelector('button:text-matches("allow all cookies", "i")', { timeout: 15_000 }),
-      page.waitForSelector('input[name="username"]', { timeout: 15_000 }),
+      page.waitForSelector(usernameSelector, { timeout: 15_000 }),
     ]);
   } catch {
     // Neither appeared quickly — screenshot for diagnostics and proceed anyway
@@ -102,10 +106,8 @@ module.exports = async () => {
   await page.screenshot({ path: path.join(__dirname, 'before-login.png') });
 
   // -- Step 2: Fill credentials --
-  // Instagram's username field has type="email" which causes browser-level
-  // validation to reject plain usernames. Change to "text" before filling.
   try {
-    await page.waitForSelector('input[name="username"]', { timeout: 15_000 });
+    await page.waitForSelector(usernameSelector, { timeout: 15_000 });
   } catch {
     await page.screenshot({ path: path.join(__dirname, 'login-failed.png') });
     await browser.close();
@@ -115,11 +117,8 @@ module.exports = async () => {
       'Instagram may have changed its login page structure.'
     );
   }
-  await page.evaluate(() => {
-    document.querySelector('input[name="username"]').type = 'text';
-  });
-  await page.fill('input[name="username"]', username);
-  await page.fill('input[name="password"]', password);
+  await page.fill(usernameSelector, username);
+  await page.fill(passwordSelector, password);
 
   // Small pause so Instagram enables the submit button
   await page.waitForTimeout(500);
@@ -151,9 +150,9 @@ module.exports = async () => {
     }
   }
 
-  // Last resort: press Enter
+  // Last resort: press Enter on whichever password field is present
   if (!clicked) {
-    await page.locator('input[name="password"]').press('Enter');
+    await page.locator(passwordSelector).first().press('Enter');
     clicked = true;
     console.log('[setup] Submitted via Enter key.');
   }
