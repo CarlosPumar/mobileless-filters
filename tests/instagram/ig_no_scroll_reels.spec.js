@@ -3,19 +3,22 @@
  *
  * Verifies the ig_no_scroll_reels JS filter:
  *
- * The filter uses a VIEWPORT-FILL GUARD rather than URL matching to
- * distinguish the full-screen Reels player from embedded videos elsewhere.
- * The Reels player always fills >= 85% of the viewport height; embedded
- * post videos, DM clips, and carousels are significantly smaller.
- *
- * This design lets the filter also work when reels are accessed from DMs
- * or profile grids (wherever a full-screen player appears), while never
- * locking normal page scroll.
+ * The filter now consolidates three behaviours:
+ *   1. Hides the Reels navigation link (injected CSS).
+ *   2. Hides reel post articles in the feed.
+ *   3. Blocks scrolling in the full-screen Reels player using a VIEWPORT-FILL
+ *      GUARD (>= 85% of viewport height) rather than URL matching — so the
+ *      filter works wherever a full-screen player appears (standalone /reels/,
+ *      DMs, profile reels) while never locking normal page scroll.
  *
  * Tests:
- * 1. LOCKS on /reels/ (full-screen player).
- * 2. Does NOT lock on main feed (/) — embedded videos are smaller than viewport.
- * 3. Unlocks cleanly when navigating /reels/ → / via SPA navigation.
+ * 1. Reels nav link is hidden after injection.
+ * 2. Reel post articles are hidden in the feed after injection.
+ * 3. LOCKS on /reels/ (full-screen player).
+ * 4. Does NOT lock on main feed (/) — embedded videos are smaller than viewport.
+ * 5. Unlocks cleanly when navigating /reels/ → / via SPA navigation.
+ * 6. Unlocks when the container is still in the DOM but shrinks below 85% viewport
+ *    (simulates closing a reel opened from a DM conversation).
  */
 
 const { test, expect } = require('@playwright/test');
@@ -32,14 +35,12 @@ async function injectFilter(page) {
 
 /**
  * Returns true if a full-viewport-height container is locked:
- * - snap lock: overflow:hidden on a container >= 85% viewport height with videos
  * - transform lock: <style id="ml-reel-lock"> present
+ * - snap lock: overflow:hidden on a container >= 85% viewport height with videos
  */
 async function isLocked(page) {
   return page.evaluate(() => {
-    // Transform lock
     if (document.getElementById('ml-reel-lock')) return true;
-    // Snap lock — only on full-viewport containers (same guard as the filter)
     const minH = window.innerHeight * 0.85;
     for (const div of document.querySelectorAll('div')) {
       if (div.clientHeight < minH) continue;
@@ -51,19 +52,49 @@ async function isLocked(page) {
   });
 }
 
-// ─── 1. Reels page: filter MUST lock ────────────────────────────────────────
-
 test.describe('ig_no_scroll_reels filter', () => {
+
+  // ─── 1. Reels nav link hidden ────────────────────────────────────────────
+
+  test('reels nav link is hidden after injection', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'networkidle' });
+
+    const reelsLink = page.locator('a[href="/reels/"]').first();
+    await expect(reelsLink).toBeVisible();
+
+    await injectFilter(page);
+    await page.waitForTimeout(500);
+
+    await expect(reelsLink).toBeHidden();
+  });
+
+  // ─── 2. Reel posts hidden in feed ───────────────────────────────────────
+
+  test('reel post articles are hidden in the feed after injection', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'networkidle' });
+    await page.waitForSelector('article', { timeout: 20_000 });
+
+    await injectFilter(page);
+    await page.waitForTimeout(2_000); // let setInterval run
+
+    const reelArticles = page.locator('article:has(a[href*="/reel/"])');
+    const count = await reelArticles.count();
+    for (let i = 0; i < count; i++) {
+      await expect(reelArticles.nth(i)).toBeHidden();
+    }
+  });
+
+  // ─── 3. Reels page: scroll must be locked ───────────────────────────────
+
   test('locks full-screen reels player on /reels/', async ({ page }) => {
     await page.goto('/reels/', { waitUntil: 'networkidle' });
     await page.waitForSelector('video', { timeout: 30_000 });
 
     await injectFilter(page);
-    await page.waitForTimeout(2_000); // let setInterval run
+    await page.waitForTimeout(2_000);
 
     const lockApplied = await page.evaluate(() => {
       if (document.getElementById('ml-reel-lock')) return { locked: true, method: 'transform-style' };
-
       const minH = window.innerHeight * 0.85;
       for (const div of document.querySelectorAll('div')) {
         const cs = window.getComputedStyle(div);
@@ -78,21 +109,19 @@ test.describe('ig_no_scroll_reels filter', () => {
     console.log(`[test] Reels locked via: ${lockApplied.method}`);
   });
 
-  // ─── 2. Main feed: filter must NOT lock ─────────────────────────────────
+  // ─── 4. Main feed: scroll must NOT be locked ────────────────────────────
 
   test('does NOT lock scroll on main feed (/)', async ({ page }) => {
     await page.goto('/', { waitUntil: 'networkidle' });
 
     await injectFilter(page);
-
-    // Scroll to load video posts that could be false-positive candidates
     await page.evaluate(() => window.scrollTo(0, 3000));
-    await page.waitForTimeout(3_000); // multiple setInterval cycles
+    await page.waitForTimeout(3_000);
 
     expect(await isLocked(page)).toBe(false);
   });
 
-  // ─── 3. Navigate reels → feed: must unlock cleanly ──────────────────────
+  // ─── 5. Navigate reels → feed: must unlock cleanly ──────────────────────
 
   test('unlocks when navigating from /reels/ back to feed', async ({ page }) => {
     await page.goto('/reels/', { waitUntil: 'networkidle' });
@@ -100,12 +129,38 @@ test.describe('ig_no_scroll_reels filter', () => {
     await injectFilter(page);
     await page.waitForTimeout(2_000);
 
-    // Confirm locked on reels
     expect(await isLocked(page)).toBe(true);
 
-    // Navigate away via SPA
     await page.goto('/', { waitUntil: 'networkidle' });
     await page.waitForTimeout(2_000);
+
+    expect(await isLocked(page)).toBe(false);
+  });
+
+  // ─── 6. Unlock when container shrinks (DM reel close scenario) ──────────
+
+  test('unlocks when locked container shrinks below 85% viewport (DM reel close)', async ({ page }) => {
+    await page.goto('/reels/', { waitUntil: 'networkidle' });
+    await page.waitForSelector('video', { timeout: 30_000 });
+    await injectFilter(page);
+    await page.waitForTimeout(2_000);
+
+    expect(await isLocked(page)).toBe(true);
+
+    // Simulate closing a reel in DMs: the container stays in the DOM but
+    // Instagram shrinks it below the 85% viewport threshold.
+    await page.evaluate(() => {
+      const minH = window.innerHeight * 0.85;
+      for (const div of document.querySelectorAll('div')) {
+        if (div.clientHeight >= minH && div.querySelectorAll('video').length > 0) {
+          div.style.height = '100px';
+          break;
+        }
+      }
+    });
+
+    // Wait for the setInterval (500ms) to detect the change
+    await page.waitForTimeout(1_500);
 
     expect(await isLocked(page)).toBe(false);
   });

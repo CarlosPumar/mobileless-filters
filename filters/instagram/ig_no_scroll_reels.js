@@ -5,6 +5,24 @@ var _mlReelType=null;
 var _mlReelScrollDesc=null;
 var _mlReelEvListeners=[];
 
+// Inject CSS to hide the Reels nav link and suppress the nav tab
+(function(){
+    if(document.getElementById('ml-reel-nav-hide'))return;
+    var s=document.createElement('style');
+    s.id='ml-reel-nav-hide';
+    s.textContent='a[href="/reels/"]{display:none!important;}';
+    (document.head||document.documentElement).appendChild(s);
+})();
+
+function _mlHideReelPosts(){
+    document.querySelectorAll('a[href*="/reel/"]').forEach(function(a){
+        var el=a.closest('article');
+        if(el)el.style.setProperty('display','none','important');
+    });
+}
+_mlHideReelPosts();
+setInterval(_mlHideReelPosts,1500);
+
 function _mlHasVideo(el){
     return el.querySelectorAll('video').length>0;
 }
@@ -139,8 +157,13 @@ function _mlUnlockReels(){
 }
 
 setInterval(function(){
-    if(_mlReelContainer&&!document.contains(_mlReelContainer)){
-        _mlUnlockReels();
+    if(_mlReelContainer){
+        // Unlock if the container was removed from the DOM OR is no longer
+        // a full-screen reel player (e.g. user closed a reel opened from DMs
+        // and the overlay shrank/was hidden — but stayed in the DOM tree).
+        if(!document.contains(_mlReelContainer)||!_mlIsFullscreenReelContainer(_mlReelContainer)){
+            _mlUnlockReels();
+        }
     }
     if(!_mlReelContainer){
         _mlLockReels();
