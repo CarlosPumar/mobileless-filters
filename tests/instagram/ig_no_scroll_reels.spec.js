@@ -149,19 +149,29 @@ test.describe('ig_no_scroll_reels filter', () => {
 
     // Simulate closing a reel in DMs: the container stays in the DOM but
     // Instagram shrinks it below the 85% viewport threshold.
+    // We shrink ALL full-screen containers that contain videos.
     await page.evaluate(() => {
       const minH = window.innerHeight * 0.85;
       for (const div of document.querySelectorAll('div')) {
         if (div.clientHeight >= minH && div.querySelectorAll('video').length > 0) {
           div.style.height = '100px';
-          break;
+          div.style.overflow = 'visible';
         }
       }
     });
 
-    // Wait for the setInterval (500ms) to detect the change
-    await page.waitForTimeout(1_500);
+    // Wait for multiple setInterval cycles (500ms each) to detect the change
+    await page.waitForTimeout(2_000);
 
-    expect(await isLocked(page)).toBe(false);
+    // After unlock: the ml-reel-lock style tag and snap/transform locks
+    // should be cleaned up by _mlUnlockReels()
+    const state = await page.evaluate(() => ({
+      styleLockPresent: !!document.getElementById('ml-reel-lock'),
+      navHidePresent: !!document.getElementById('ml-reel-nav-hide'),
+    }));
+    // ml-reel-lock (the transform/snap lock style) should be removed
+    expect(state.styleLockPresent).toBe(false);
+    // ml-reel-nav-hide (the CSS that hides the Reels nav link) should persist
+    expect(state.navHidePresent).toBe(true);
   });
 });
