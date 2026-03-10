@@ -1,0 +1,19 @@
+{
+  "androidPackage": "com.google.android.youtube",
+  "iosBundleId": "com.google.ios.youtube",
+  "appName": "YouTube",
+  "url": "https://m.youtube.com",
+  "baselineJs": "baseline.js",
+  "filters": [
+    {
+      "id": "yt_hide_home",
+      "nameKey": "filter_yt_hide_home",
+      "js": "yt_hide_home.js"
+    },
+    {
+      "id": "yt_hide_shorts",
+      "nameKey": "filter_yt_hide_shorts",
+      "js": "yt_hide_shorts.js"
+    }
+  ]
+}

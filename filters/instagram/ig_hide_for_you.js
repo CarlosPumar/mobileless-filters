@@ -11,7 +11,7 @@
 //   - A fixed overlay with "Blocked by MobileLess" covers the content area.
 //     pointer-events:none so the nav bar stays clickable underneath.
 
-var _mlForYouActive = false;
+var _mlForYouActive = window._mlForYouActive || false;
 
 function _mlIsMainFeed() {
     var p = window.location.pathname.replace(/\/+$/, '') || '/';
@@ -60,7 +60,6 @@ function _mlActivate() {
 }
 
 function _mlDeactivate() {
-    if (!_mlForYouActive) return;
     var s = document.getElementById('ml-for-you-style');
     if (s && s.parentNode) s.parentNode.removeChild(s);
     var o = document.getElementById('ml-for-you-overlay');
@@ -68,7 +67,8 @@ function _mlDeactivate() {
     _mlForYouActive = false;
 }
 
-setInterval(function() {
+if(window._mlForYouInterval)clearInterval(window._mlForYouInterval);
+window._mlForYouInterval=setInterval(function() {
     if (_mlIsMainFeed()) {
         _mlActivate();
     } else {

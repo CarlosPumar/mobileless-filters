@@ -69,5 +69,6 @@
         });
     }
     _mlHideAppBanners();
-    setInterval(_mlHideAppBanners,2000);
+    if(window._mlBaselineInterval)clearInterval(window._mlBaselineInterval);
+    window._mlBaselineInterval=setInterval(_mlHideAppBanners,2000);
 })();

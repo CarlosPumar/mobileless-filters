@@ -1,9 +1,9 @@
-var _mlReelObs=null;
-var _mlReelStyleEl=null;
-var _mlReelContainer=null;
-var _mlReelType=null;
-var _mlReelScrollDesc=null;
-var _mlReelEvListeners=[];
+var _mlReelObs=window._mlReelObs||null;
+var _mlReelStyleEl=window._mlReelStyleEl||null;
+var _mlReelContainer=window._mlReelContainer||null;
+var _mlReelType=window._mlReelType||null;
+var _mlReelScrollDesc=window._mlReelScrollDesc||null;
+var _mlReelEvListeners=window._mlReelEvListeners||[];
 
 // Inject CSS to hide the Reels nav link and suppress the nav tab
 (function(){
@@ -21,7 +21,8 @@ function _mlHideReelPosts(){
     });
 }
 _mlHideReelPosts();
-setInterval(_mlHideReelPosts,1500);
+if(window._mlHideReelPostsInterval)clearInterval(window._mlHideReelPostsInterval);
+window._mlHideReelPostsInterval=setInterval(_mlHideReelPosts,1500);
 
 function _mlHasVideo(el){
     return el.querySelectorAll('video').length>0;
@@ -156,11 +157,9 @@ function _mlUnlockReels(){
     _mlReelType=null;
 }
 
-setInterval(function(){
+if(window._mlReelLockInterval)clearInterval(window._mlReelLockInterval);
+window._mlReelLockInterval=setInterval(function(){
     if(_mlReelContainer){
-        // Unlock if the container was removed from the DOM OR is no longer
-        // a full-screen reel player (e.g. user closed a reel opened from DMs
-        // and the overlay shrank/was hidden — but stayed in the DOM tree).
         if(!document.contains(_mlReelContainer)||!_mlIsFullscreenReelContainer(_mlReelContainer)){
             _mlUnlockReels();
         }

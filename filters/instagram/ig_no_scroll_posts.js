@@ -15,9 +15,10 @@
 //   everywhere else          – block scrolling on scrollable post containers
 //                             (DMs, profile grids, post pages, etc.).
 
-var _mlPostScrollLocked=[];
-var _mlExploreActive=false;
-var _mlPostScrollDesc=null;
+var _mlPostScrollLocked=window._mlPostScrollLocked||[];
+window._mlPostScrollLocked=_mlPostScrollLocked;
+var _mlExploreActive=window._mlExploreActive||false;
+var _mlPostScrollDesc=window._mlPostScrollDesc||null;
 
 var _ML_BLOCKED_MSG='Blocked by MobileLess';
 
@@ -93,7 +94,6 @@ function _mlActivateExplore(){
 }
 
 function _mlDeactivateExplore(){
-    if(!_mlExploreActive)return;
     var s=document.getElementById('ml-explore-style');
     if(s&&s.parentNode)s.parentNode.removeChild(s);
     var o=document.getElementById('ml-explore-overlay');
@@ -161,7 +161,8 @@ function _mlLockPostScrollContainers(){
 
 // ── Main interval ────────────────────────────────────────────────────────────
 
-setInterval(function(){
+if(window._mlPostScrollInterval)clearInterval(window._mlPostScrollInterval);
+window._mlPostScrollInterval=setInterval(function(){
     if(_mlIsMainFeed()){
         _mlUnlockAllPostScroll();
         _mlDeactivateExplore();
