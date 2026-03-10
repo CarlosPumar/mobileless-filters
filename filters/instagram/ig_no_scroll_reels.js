@@ -9,9 +9,19 @@ function _mlHasVideo(el){
     return el.querySelectorAll('video').length>0;
 }
 
+// A full-screen Reels player always fills (almost) the entire viewport.
+// Embedded videos in feed posts, DM threads, or carousels are significantly
+// smaller. Requiring >= 85 % of viewport height prevents false positives on
+// those elements while still matching the player wherever it appears
+// (standalone /reels/, reels opened from DMs, profile reels, etc.).
+function _mlIsFullscreenReelContainer(el){
+    return el.clientHeight>=window.innerHeight*0.85;
+}
+
 function _mlFindTransformContainer(){
     var divs=document.querySelectorAll('div');
     for(var i=0;i<divs.length;i++){
+        if(!_mlIsFullscreenReelContainer(divs[i]))continue;
         var ch=divs[i].children;
         if(ch.length<2)continue;
         var f=ch[0],s=ch[1];
@@ -20,7 +30,6 @@ function _mlFindTransformContainer(){
         var ss=s.getAttribute('style')||'';
         if(fs.indexOf('transform-origin: center top')<0)continue;
         if(ss.indexOf('transform-origin: center top')<0)continue;
-        if(divs[i].clientHeight<300)continue;
         if(!_mlHasVideo(divs[i]))continue;
         return divs[i];
     }
@@ -33,7 +42,7 @@ function _mlFindSnapContainer(){
         var cs=window.getComputedStyle(divs[i]);
         if(cs.scrollSnapType!=='y mandatory')continue;
         if(divs[i].scrollHeight<=divs[i].clientHeight+50)continue;
-        if(divs[i].clientHeight<=300)continue;
+        if(!_mlIsFullscreenReelContainer(divs[i]))continue;
         if(!_mlHasVideo(divs[i]))continue;
         return divs[i];
     }

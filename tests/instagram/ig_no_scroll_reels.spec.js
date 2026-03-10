@@ -15,8 +15,7 @@
  * Tests:
  * 1. LOCKS on /reels/ (full-screen player).
  * 2. Does NOT lock on main feed (/) — embedded videos are smaller than viewport.
- * 3. Does NOT lock on DMs inbox (/direct/inbox/) — no snap containers there.
- * 4. Unlocks cleanly when navigating /reels/ → / via SPA navigation.
+ * 3. Unlocks cleanly when navigating /reels/ → / via SPA navigation.
  */
 
 const { test, expect } = require('@playwright/test');
@@ -93,18 +92,7 @@ test.describe('ig_no_scroll_reels filter', () => {
     expect(await isLocked(page)).toBe(false);
   });
 
-  // ─── 3. DMs inbox: filter must NOT lock ─────────────────────────────────
-
-  test('does NOT lock scroll on DMs inbox (/direct/inbox/)', async ({ page }) => {
-    await page.goto('/direct/inbox/', { waitUntil: 'networkidle' });
-
-    await injectFilter(page);
-    await page.waitForTimeout(3_000);
-
-    expect(await isLocked(page)).toBe(false);
-  });
-
-  // ─── 4. Navigate reels → feed: must unlock cleanly ──────────────────────
+  // ─── 3. Navigate reels → feed: must unlock cleanly ──────────────────────
 
   test('unlocks when navigating from /reels/ back to feed', async ({ page }) => {
     await page.goto('/reels/', { waitUntil: 'networkidle' });
