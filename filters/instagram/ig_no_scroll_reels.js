@@ -9,8 +9,6 @@ var _mlSwipeBlocker=window._mlSwipeBlocker||null;
 var _mlSwipeStartListener=window._mlSwipeStartListener||null;
 
 // Hide only the Reels nav tab so the user cannot navigate to the /reels/ section.
-// Reel posts in the home feed are intentionally left visible — hiding them causes
-// Instagram's infinite-scroll to loop endlessly loading more content.
 (function(){
     if(document.getElementById('ml-reel-nav-hide'))return;
     var s=document.createElement('style');
@@ -24,11 +22,22 @@ function _mlHasVideo(el){
     return el.querySelectorAll('video').length>0;
 }
 
-// A full-screen Reels player always fills (almost) the entire viewport.
-// Embedded videos in feed posts, DM threads, or carousels are significantly
-// smaller. Requiring >= 85 % of viewport height prevents false positives.
 function _mlIsFullscreenReelContainer(el){
     return el.clientHeight>=window.innerHeight*0.85;
+}
+
+// Returns true only when children are each roughly viewport-height (reel feed).
+// A DM message list has many small bubbles — this check prevents locking it.
+// Requires at least 2 fullscreen-height children (a single embedded video
+// thumbnail in a DM doesn't count as a scrollable reel feed).
+function _mlIsReelFeedContainer(el){
+    var iH=window.innerHeight;
+    var ch=el.children;
+    var big=0;
+    for(var i=0;i<ch.length&&i<6;i++){
+        if(ch[i].getBoundingClientRect().height>=iH*0.7) big++;
+    }
+    return big>=2;
 }
 
 function _mlFindTransformContainer(){
@@ -57,13 +66,14 @@ function _mlFindSnapContainer(){
         if(divs[i].scrollHeight<=divs[i].clientHeight+50)continue;
         if(!_mlIsFullscreenReelContainer(divs[i]))continue;
         if(!_mlHasVideo(divs[i]))continue;
+        if(!_mlIsReelFeedContainer(divs[i]))continue;
         return divs[i];
     }
     return null;
 }
 
 // Instagram now implements Reels with overflow-y:scroll + touch-action:none,
-// using JS to change scrollTop directly (no CSS snap). Detect it separately.
+// driving scrollTop via JS. Detect it separately.
 function _mlFindJsScrollContainer(){
     var divs=document.querySelectorAll('div');
     for(var i=0;i<divs.length;i++){
@@ -72,14 +82,14 @@ function _mlFindJsScrollContainer(){
         if(divs[i].scrollHeight<=divs[i].clientHeight+200)continue;
         if(!_mlIsFullscreenReelContainer(divs[i]))continue;
         if(!_mlHasVideo(divs[i]))continue;
+        if(!_mlIsReelFeedContainer(divs[i]))continue;
         return divs[i];
     }
     return null;
 }
 
-// Primary swipe blocker — attaches to document in capture phase so Instagram
-// never sees the touchmove event. Only blocks vertical gestures (dy > 5px)
-// to leave taps (like, comment, follow) completely unaffected.
+// Primary swipe blocker — captures touchmove at document level.
+// Only blocks vertical gestures on the detected reel container.
 function _mlInstallSwipeBlocker(){
     if(_mlSwipeBlocker)return;
     _mlSwipeTouchStart=null;
@@ -88,12 +98,11 @@ function _mlInstallSwipeBlocker(){
     };
     _mlSwipeBlocker=function(e){
         if(_mlSwipeTouchStart===null)return;
-        // Never block gestures on Stories or DM paths.
         if(_mlIsStoriesPath())return;
-        if(_mlIsInDMs())return;
-        // Never block gestures that start outside the detected reel container
-        // (e.g. story-upload media picker, post composer, comment fields).
-        if(_mlReelContainer&&e.target&&!_mlReelContainer.contains(e.target))return;
+        // If the reel container is gone, self-remove and bail.
+        if(!_mlReelContainer){_mlRemoveSwipeBlocker();return;}
+        // Only block gestures that land inside the reel container.
+        if(e.target&&!_mlReelContainer.contains(e.target))return;
         var dy=Math.abs(e.changedTouches[0].clientY-_mlSwipeTouchStart);
         if(dy>5){
             e.preventDefault();
@@ -102,7 +111,6 @@ function _mlInstallSwipeBlocker(){
     };
     document.addEventListener('touchstart',_mlSwipeStartListener,{capture:true,passive:true});
     document.addEventListener('touchmove',_mlSwipeBlocker,{capture:true,passive:false});
-    // Persist references on window so they survive script re-injections
     window._mlSwipeTouchStart=_mlSwipeTouchStart;
     window._mlSwipeBlocker=_mlSwipeBlocker;
     window._mlSwipeStartListener=_mlSwipeStartListener;
@@ -123,9 +131,6 @@ function _mlRemoveSwipeBlocker(){
     window._mlSwipeTouchStart=null;
 }
 
-// Secondary: MutationObserver-based lock for transform containers.
-// Watches inline-style changes on reel children and reverts any transform
-// mutation back to the recorded initial value.
 function _mlLockTransform(c){
     var locked=new Map();
     function addChild(el){
@@ -142,9 +147,7 @@ function _mlLockTransform(c){
                 var el=m.target;
                 if(locked.has(el)){
                     var want=locked.get(el);
-                    if(el.style.transform!==want){
-                        el.style.transform=want;
-                    }
+                    if(el.style.transform!==want) el.style.transform=want;
                 }
             }else if(m.type==='childList'){
                 m.addedNodes.forEach(addChild);
@@ -161,7 +164,6 @@ function _mlLockTransform(c){
     }
 }
 
-// Secondary: overflow-based lock for snap-scroll containers.
 function _mlLockSnap(c){
     var frozenTop=c.scrollTop;
     c.style.setProperty('overflow','hidden','important');
@@ -182,14 +184,8 @@ function _mlLockSnap(c){
 
 function _mlLockReels(){
     if(_mlReelObs||_mlReelType==='snap')return;
-    // Never lock in Stories paths — the story creation media picker is a
-    // full-screen snap-scroll container with video thumbnails that would be
-    // misidentified as the Reels player, blocking swipes in the composer.
+    // Skip story creation / viewer paths.
     if(_mlIsStoriesPath())return;
-    // Never lock in DMs — shared reels and video messages can create fullscreen
-    // snap/transform containers that match our heuristics, which would block
-    // scrolling through the conversation thread.
-    if(_mlIsInDMs())return;
     var tc=_mlFindTransformContainer();
     if(tc){
         _mlReelContainer=tc;
@@ -209,7 +205,7 @@ function _mlLockReels(){
     var jsc=_mlFindJsScrollContainer();
     if(jsc){
         _mlReelContainer=jsc;
-        _mlReelType='snap'; // same cleanup path as snap
+        _mlReelType='snap';
         _mlInstallSwipeBlocker();
         _mlLockSnap(jsc);
         return;
@@ -243,9 +239,6 @@ function _mlIsInDMs(){
     return _mlCurrentPath().indexOf('/direct/')===0;
 }
 
-// Exclude story creation and story viewer paths from reel locking.
-// These paths use full-screen containers with snap-scroll / video thumbnails
-// that would otherwise be misidentified as the Reels player.
 function _mlIsStoriesPath(){
     return _mlCurrentPath().indexOf('/stories/')===0;
 }
@@ -253,13 +246,13 @@ function _mlIsStoriesPath(){
 if(window._mlReelLockInterval)clearInterval(window._mlReelLockInterval);
 window._mlReelLockInterval=setInterval(function(){
     if(_mlReelContainer){
-        // Always release the lock when in DMs or Stories — even if the container
-        // is still in the DOM and fullscreen. Instagram (React) reuses the same
-        // outer container for multiple views, so the touchmove listener from a
-        // previous Reels session would keep blocking scroll in those pages.
-        var shouldUnlock = _mlIsInDMs() || _mlIsStoriesPath()
-            || !document.contains(_mlReelContainer)
-            || !_mlIsFullscreenReelContainer(_mlReelContainer);
+        // Unlock if the container left the DOM, is no longer fullscreen,
+        // or its children are no longer reel-sized (Instagram reused the
+        // container for a DM message list or other non-reel view).
+        var shouldUnlock = !document.contains(_mlReelContainer)
+            || !_mlIsFullscreenReelContainer(_mlReelContainer)
+            || !_mlIsReelFeedContainer(_mlReelContainer)
+            || _mlIsStoriesPath();
         if(shouldUnlock) _mlUnlockReels();
     }
     if(!_mlReelContainer){
