@@ -62,6 +62,21 @@ function _mlFindSnapContainer(){
     return null;
 }
 
+// Instagram now implements Reels with overflow-y:scroll + touch-action:none,
+// using JS to change scrollTop directly (no CSS snap). Detect it separately.
+function _mlFindJsScrollContainer(){
+    var divs=document.querySelectorAll('div');
+    for(var i=0;i<divs.length;i++){
+        var cs=window.getComputedStyle(divs[i]);
+        if(cs.overflowY!=='scroll')continue;
+        if(divs[i].scrollHeight<=divs[i].clientHeight+200)continue;
+        if(!_mlIsFullscreenReelContainer(divs[i]))continue;
+        if(!_mlHasVideo(divs[i]))continue;
+        return divs[i];
+    }
+    return null;
+}
+
 // Primary swipe blocker — attaches to document in capture phase so Instagram
 // never sees the touchmove event. Only blocks vertical gestures (dy > 5px)
 // to leave taps (like, comment, follow) completely unaffected.
@@ -191,6 +206,14 @@ function _mlLockReels(){
         _mlLockSnap(sc);
         return;
     }
+    var jsc=_mlFindJsScrollContainer();
+    if(jsc){
+        _mlReelContainer=jsc;
+        _mlReelType='snap'; // same cleanup path as snap
+        _mlInstallSwipeBlocker();
+        _mlLockSnap(jsc);
+        return;
+    }
 }
 
 function _mlUnlockReels(){
@@ -230,9 +253,14 @@ function _mlIsStoriesPath(){
 if(window._mlReelLockInterval)clearInterval(window._mlReelLockInterval);
 window._mlReelLockInterval=setInterval(function(){
     if(_mlReelContainer){
-        if(!document.contains(_mlReelContainer)||!_mlIsFullscreenReelContainer(_mlReelContainer)){
-            _mlUnlockReels();
-        }
+        // Always release the lock when in DMs or Stories — even if the container
+        // is still in the DOM and fullscreen. Instagram (React) reuses the same
+        // outer container for multiple views, so the touchmove listener from a
+        // previous Reels session would keep blocking scroll in those pages.
+        var shouldUnlock = _mlIsInDMs() || _mlIsStoriesPath()
+            || !document.contains(_mlReelContainer)
+            || !_mlIsFullscreenReelContainer(_mlReelContainer);
+        if(shouldUnlock) _mlUnlockReels();
     }
     if(!_mlReelContainer){
         _mlLockReels();
