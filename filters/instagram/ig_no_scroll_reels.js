@@ -73,8 +73,9 @@ function _mlInstallSwipeBlocker(){
     };
     _mlSwipeBlocker=function(e){
         if(_mlSwipeTouchStart===null)return;
-        // Never block gestures on Stories paths (story creation, story viewer).
+        // Never block gestures on Stories or DM paths.
         if(_mlIsStoriesPath())return;
+        if(_mlIsInDMs())return;
         // Never block gestures that start outside the detected reel container
         // (e.g. story-upload media picker, post composer, comment fields).
         if(_mlReelContainer&&e.target&&!_mlReelContainer.contains(e.target))return;
@@ -170,18 +171,17 @@ function _mlLockReels(){
     // full-screen snap-scroll container with video thumbnails that would be
     // misidentified as the Reels player, blocking swipes in the composer.
     if(_mlIsStoriesPath())return;
-    // Skip transform detection in DMs — the message container can match
-    // (tall + video thumbnails) but isn't a reel player.  Snap detection
-    // is safe in DMs because message threads never use scroll-snap-type.
-    if(!_mlIsInDMs()){
-        var tc=_mlFindTransformContainer();
-        if(tc){
-            _mlReelContainer=tc;
-            _mlReelType='transform';
-            _mlInstallSwipeBlocker();
-            _mlLockTransform(tc);
-            return;
-        }
+    // Never lock in DMs — shared reels and video messages can create fullscreen
+    // snap/transform containers that match our heuristics, which would block
+    // scrolling through the conversation thread.
+    if(_mlIsInDMs())return;
+    var tc=_mlFindTransformContainer();
+    if(tc){
+        _mlReelContainer=tc;
+        _mlReelType='transform';
+        _mlInstallSwipeBlocker();
+        _mlLockTransform(tc);
+        return;
     }
     var sc=_mlFindSnapContainer();
     if(sc){

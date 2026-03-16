@@ -69,19 +69,6 @@
                 if(b.parentElement) b.parentElement.style.setProperty('display','none','important');
             }
         });
-        // 6. Hide "Get the full experience" / "Sign up for Instagram to" bottom bar
-        //    ONLY when it also contains an "Open Instagram" CTA — i.e. when it is
-        //    acting as an app-install banner, not as the regular login/signup bar.
-        //    Hiding the entire bar when it contains "Log in" would prevent the user
-        //    from being able to authenticate.
-        document.querySelectorAll('div,section').forEach(function(d){
-            if(d.children.length===0)return;
-            var txt=d.textContent.trim();
-            if((txt.indexOf('Get the full experience')===0||txt.indexOf('Sign up for Instagram to')===0)
-                && /open instagram|abrir instagram|open app|abrir la aplicaci/i.test(txt)){
-                d.style.setProperty('display','none','important');
-            }
-        });
     }
     _mlHideAppBanners();
     if(window._mlBaselineInterval)clearInterval(window._mlBaselineInterval);
