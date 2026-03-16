@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "description": "Playwright tests to verify that Instagram filter scripts work on the live site",
   "scripts": {
-    "test": "playwright test",
+    "setup": "node setup-auth.js",
+    "test": "playwright test && npx playwright test --config youtube/playwright.config.js",
+    "test:instagram": "playwright test",
+    "test:youtube": "npx playwright test --config youtube/playwright.config.js",
     "test:headed": "playwright test --headed",
     "test:report": "playwright show-report"
   },

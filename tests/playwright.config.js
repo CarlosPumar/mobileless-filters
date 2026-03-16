@@ -3,6 +3,8 @@ const path = require('path');
 
 module.exports = defineConfig({
   testDir: '.',
+  // Exclude youtube/ — it has its own config with a different baseURL
+  testIgnore: ['**/youtube/**'],
   timeout: 60_000,
   expect: { timeout: 20_000 },
   retries: 1, // Retry once on flakiness (network, slow load)

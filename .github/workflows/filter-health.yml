@@ -1,15 +1,14 @@
 name: Filter Health Check
 
 on:
-  schedule:
-    # Daily at 08:00 UTC
-    - cron: '0 8 * * *'
-  # Allow manual trigger from GitHub Actions UI
+  # Schedule paused — re-enable by uncommenting the lines below
+  # schedule:
+  #   - cron: '0 8 * * *'
   workflow_dispatch:
 
 jobs:
   test:
-    name: Instagram filter tests
+    name: Filter tests (Instagram + YouTube)
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -32,27 +31,40 @@ jobs:
         working-directory: tests
         run: npx playwright install chromium --with-deps
 
-      - name: Run filter tests
+      # Restore Instagram session from secret so we never need headless login
+      # (GitHub Actions IPs are blocked by Instagram's bot detection)
+      # To regenerate: run `npm run setup` locally, then:
+      #   base64 -i tests/auth.json | pbcopy
+      # and update the INSTAGRAM_AUTH_JSON secret in GitHub.
+      - name: Restore Instagram session
+        if: ${{ secrets.INSTAGRAM_AUTH_JSON != '' }}
+        working-directory: tests
+        run: echo "${{ secrets.INSTAGRAM_AUTH_JSON }}" | base64 -d > auth.json
+
+      - name: Run Instagram filter tests
         working-directory: tests
         run: npx playwright test
         env:
           INSTAGRAM_USERNAME: ${{ secrets.INSTAGRAM_USERNAME }}
           INSTAGRAM_PASSWORD: ${{ secrets.INSTAGRAM_PASSWORD }}
 
+      - name: Run YouTube filter tests
+        working-directory: tests
+        run: npx playwright test --config youtube/playwright.config.js
+
       # Always upload the HTML report so you can see what failed
-      - name: Upload Playwright report
+      - name: Upload Instagram Playwright report
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: playwright-report
+          name: playwright-report-instagram
           path: tests/playwright-report/
           retention-days: 14
 
-      # Upload login-failed screenshot if login itself broke
-      - name: Upload login failure screenshot
+      - name: Upload YouTube Playwright report
         uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
-          name: login-failed
-          path: tests/login-failed.png
-          retention-days: 7
+          name: playwright-report-youtube
+          path: tests/youtube/playwright-report-youtube/
+          retention-days: 14

@@ -1,75 +1,130 @@
 // ig_hide_for_you.js
-// Only activates on the main Instagram feed (/).
+// Only activates on the main Instagram feed (/) when the user is logged in.
 //
-// Strategy to avoid flicker and infinite-scroll loop:
-//   - Uses `visibility: hidden` (NOT display:none) so articles keep their
-//     height. The page scroll height stays the same, so Instagram's
-//     IntersectionObserver sentinel for infinite scroll never enters the
-//     viewport and stops triggering new loads.
-//   - Locks window scroll (overflow:hidden on html+body) so the user cannot
-//     scroll down to where the sentinel eventually is.
-//   - A fixed overlay with "Blocked by MobileLess" covers the content area.
-//     pointer-events:none so the nav bar stays clickable underneath.
-
-var _mlForYouActive = window._mlForYouActive || false;
+// Strategy:
+//   - Finds the feed container div (nextElementSibling of the stories bar) and
+//     hides it with display:none. This collapses the page height so there is
+//     nothing to scroll, and ALL feed content is hidden regardless of any
+//     visibility:visible overrides inside Instagram.
+//   - A fixed overlay covers the area below stories to show "Blocked by
+//     MobileLess". The overlay uses pointer-events:none so all elements below
+//     (nav bar, header) remain fully interactive even if visually the overlay
+//     background reaches them.
+//   - The overlay bottom is set to exactly the height of Instagram's bottom nav
+//     bar so it does not physically overlap with the nav bar — avoiding any
+//     z-index conflict entirely. If detection fails, a 70px fallback is used.
 
 function _mlIsMainFeed() {
     var p = window.location.pathname.replace(/\/+$/, '') || '/';
     return p === '/' || p === '';
 }
 
+function _mlIsLoggedIn() {
+    if (document.querySelector('a[href="/u/profile/"]')) return false;
+    if (document.querySelector('a[href*="accounts/login"], a[href*="accounts/emailsignup"]')) return false;
+    return true;
+}
+
+// Find the stories bar and its next sibling (the feed container).
+function _mlFindFeedParts() {
+    var iW = window.innerWidth;
+    function walk(el, depth) {
+        if (depth > 12 || !el) return null;
+        var children = Array.from(el.children);
+        for (var i = 0; i < children.length; i++) {
+            var c = children[i];
+            var r = c.getBoundingClientRect();
+            if (r.height > 60 && r.height < 220 &&
+                Math.abs(r.top - 44) < 30 &&
+                r.width > iW * 0.7 &&
+                c.nextElementSibling) {
+                return { stories: c, feed: c.nextElementSibling };
+            }
+        }
+        for (var j = 0; j < children.length; j++) {
+            var res = walk(children[j], depth + 1);
+            if (res) return res;
+        }
+        return null;
+    }
+    var main = document.querySelector('main');
+    return main ? walk(main, 0) : null;
+}
+
+// Measure the height of Instagram's fixed bottom nav bar.
+// Returns the height in CSS pixels so the overlay can end just above it.
+function _mlNavBarHeight() {
+    var iH = window.innerHeight;
+    var bottomH = 0;
+    document.querySelectorAll('div,nav,section').forEach(function(el) {
+        var cs = window.getComputedStyle(el);
+        var r  = el.getBoundingClientRect();
+        if (cs.position === 'fixed' &&
+            r.top > iH * 0.70 &&
+            r.bottom <= iH + 2 &&
+            r.height >= 40 && r.height <= 100) {
+            var h = iH - r.top;
+            if (h > bottomH) bottomH = h;
+        }
+    });
+    // Use 70px fallback — generous enough to clear the nav on all devices.
+    return bottomH >= 40 ? Math.ceil(bottomH) : 70;
+}
+
 function _mlActivate() {
-    if (!document.getElementById('ml-for-you-style')) {
-        var s = document.createElement('style');
-        s.id = 'ml-for-you-style';
-        // visibility:hidden hides content but preserves layout height.
-        // overflow:hidden on html+body prevents scroll so the infinite-scroll
-        // sentinel never reaches the viewport.
-        s.textContent = [
-            'article{visibility:hidden!important;}',
-            'html,body{overflow:hidden!important;}',
-        ].join('');
-        (document.head || document.documentElement).appendChild(s);
+    var parts = _mlFindFeedParts();
+
+    if (parts && parts.feed) {
+        parts.feed.style.setProperty('display', 'none', 'important');
     }
 
-    if (!document.getElementById('ml-for-you-overlay')) {
-        var o = document.createElement('div');
+    var overlayTop = parts
+        ? Math.ceil(parts.stories.getBoundingClientRect().bottom)
+        : 169;
+    var overlayBottom = _mlNavBarHeight();
+
+    var o = document.getElementById('ml-for-you-overlay');
+    if (!o) {
+        o = document.createElement('div');
         o.id = 'ml-for-you-overlay';
-        o.setAttribute('style', [
-            'position:fixed',
-            'top:0',
-            'left:0',
-            'right:0',
-            'bottom:0',
-            'z-index:100',
-            'display:flex',
-            'align-items:center',
-            'justify-content:center',
-            'font-size:16px',
-            'color:#888',
-            'pointer-events:none',
-            'text-align:center',
-            'padding:16px',
-            'box-sizing:border-box',
-        ].join(';'));
-        o.textContent = 'Blocked by MobileLess';
-        document.body && document.body.appendChild(o);
+        if (document.body) document.body.appendChild(o);
     }
-
-    _mlForYouActive = true;
+    o.setAttribute('style', [
+        'position:fixed',
+        'top:'    + overlayTop    + 'px',
+        'left:0',
+        'right:0',
+        'bottom:' + overlayBottom + 'px',
+        'z-index:1',
+        'background:#f0f0f0',
+        'display:flex',
+        'align-items:center',
+        'justify-content:center',
+        'font-size:15px',
+        'color:#888',
+        // pointer-events:none: overlay is purely visual.
+        // Scroll prevention is not needed because display:none on the feed
+        // container collapses the page height to near-zero.
+        'pointer-events:none',
+        'text-align:center',
+        'padding:16px',
+        'box-sizing:border-box',
+    ].join(';'));
+    o.textContent = 'Blocked by MobileLess';
 }
 
 function _mlDeactivate() {
-    var s = document.getElementById('ml-for-you-style');
-    if (s && s.parentNode) s.parentNode.removeChild(s);
+    var parts = _mlFindFeedParts();
+    if (parts && parts.feed) {
+        parts.feed.style.removeProperty('display');
+    }
     var o = document.getElementById('ml-for-you-overlay');
     if (o && o.parentNode) o.parentNode.removeChild(o);
-    _mlForYouActive = false;
 }
 
 if(window._mlForYouInterval)clearInterval(window._mlForYouInterval);
 window._mlForYouInterval=setInterval(function() {
-    if (_mlIsMainFeed()) {
+    if (_mlIsMainFeed() && _mlIsLoggedIn()) {
         _mlActivate();
     } else {
         _mlDeactivate();

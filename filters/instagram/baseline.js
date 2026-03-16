@@ -1,7 +1,11 @@
 (function(){
     function _mlHideAppBanners(){
         // 1. Hide full-screen fixed overlays that contain "Open in app" modals
-        //    (e.g. "See full profile in the app", "See post in app")
+        //    (e.g. "See full profile in the app", "See post in app").
+        //    Text-length guard: a genuine "Open in app" overlay has short text
+        //    (< 400 chars). Instagram's main app container is also position:fixed
+        //    and spans the full viewport, but its textContent runs into thousands
+        //    of characters — checking length avoids hiding the whole page.
         document.querySelectorAll('div').forEach(function(d){
             var cs=window.getComputedStyle(d);
             var zi=parseInt(cs.zIndex);
@@ -9,6 +13,7 @@
             var rect=d.getBoundingClientRect();
             if(rect.width<300||rect.height<300)return;
             var txt=d.textContent;
+            if(txt.length>400)return; // skip large containers (main app shell)
             if(txt.indexOf('Open Instagram')>=0||txt.indexOf('Abrir Instagram')>=0||txt.indexOf('Open app')>=0||txt.indexOf('Abrir la aplicación')>=0||txt.indexOf('See full profile')>=0||txt.indexOf('Ver perfil completo')>=0||txt.indexOf('See post in the app')>=0){
                 d.style.setProperty('display','none','important');
             }
@@ -27,20 +32,25 @@
                 }
             });
         }
-        // 4. Hide "Open/Abrir Instagram" button on the pre-login splash page.
-        //    Uses class _aswr (primary filled button style, language-agnostic) with
-        //    "instagram" text check to avoid false positives on other pages.
-        var aswrBtn=document.querySelector('button._aswr');
-        if(aswrBtn&&/instagram/i.test(aswrBtn.textContent)){
-            var p=aswrBtn.parentElement;
-            if(p) p.style.setProperty('display','none','important');
-        }
-        // Fallback: text-based check for known translations
+        // 4. Hide "Open Instagram" / "Abrir Instagram" CTA buttons using exact
+        //    text matching only. Only hides the parent wrapper when it is a small
+        //    container (txtLen <= button text + ~5 chars overhead) that contains
+        //    nothing else important. If the parent is a larger element (e.g. a <nav>
+        //    that also contains "Log in"), only the button itself is hidden to avoid
+        //    accidentally blocking login/signup actions.
+        var _openIgTexts=['Open Instagram','Abrir Instagram','Ouvrir Instagram','Instagram öffnen','Open in Instagram'];
         document.querySelectorAll('button').forEach(function(b){
             var t=b.textContent.trim();
-            if(t==='Open Instagram'||t==='Abrir Instagram'||t==='Ouvrir Instagram'||t==='Instagram öffnen'){
-                var p=b.parentElement;
-                if(p) p.style.setProperty('display','none','important');
+            for(var i=0;i<_openIgTexts.length;i++){
+                if(t===_openIgTexts[i]){
+                    var p=b.parentElement;
+                    if(p&&p.textContent.length<=t.length+5){
+                        p.style.setProperty('display','none','important');
+                    } else {
+                        b.style.setProperty('display','none','important');
+                    }
+                    break;
+                }
             }
         });
         // 5. Hide "Use the app" bottom banner (logged-in feed)
@@ -59,11 +69,16 @@
                 if(b.parentElement) b.parentElement.style.setProperty('display','none','important');
             }
         });
-        // 6. Hide "Get the full experience" signup bar at bottom (non-logged-in)
+        // 6. Hide "Get the full experience" / "Sign up for Instagram to" bottom bar
+        //    ONLY when it also contains an "Open Instagram" CTA — i.e. when it is
+        //    acting as an app-install banner, not as the regular login/signup bar.
+        //    Hiding the entire bar when it contains "Log in" would prevent the user
+        //    from being able to authenticate.
         document.querySelectorAll('div,section').forEach(function(d){
             if(d.children.length===0)return;
             var txt=d.textContent.trim();
-            if(txt.indexOf('Get the full experience')===0||txt.indexOf('Sign up for Instagram to')===0){
+            if((txt.indexOf('Get the full experience')===0||txt.indexOf('Sign up for Instagram to')===0)
+                && /open instagram|abrir instagram|open app|abrir la aplicaci/i.test(txt)){
                 d.style.setProperty('display','none','important');
             }
         });

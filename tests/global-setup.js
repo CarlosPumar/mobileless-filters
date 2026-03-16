@@ -58,21 +58,33 @@ async function dismissCookieConsent(page) {
 }
 
 module.exports = async () => {
+  const username = process.env.INSTAGRAM_USERNAME;
+  const password = process.env.INSTAGRAM_PASSWORD;
+
+  // If no credentials are provided but a saved session exists, reuse it.
+  // This allows local development without needing to set env vars.
+  if (!username || !password) {
+    const fs = require('fs');
+    if (fs.existsSync(AUTH_FILE)) {
+      const existing = JSON.parse(fs.readFileSync(AUTH_FILE, 'utf-8'));
+      if (existing.cookies && existing.cookies.length > 3) {
+        console.log('[setup] No credentials set — reusing existing auth.json.');
+        return;
+      }
+    }
+    throw new Error(
+      'No Instagram session found.\n\n' +
+      'To run tests locally, generate auth.json first:\n' +
+      '  node tests/setup-auth.js\n\n' +
+      'For CI, set INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD as secrets.'
+    );
+  }
+
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
     ...devices['Pixel 5'],
   });
   const page = await context.newPage();
-
-  const username = process.env.INSTAGRAM_USERNAME;
-  const password = process.env.INSTAGRAM_PASSWORD;
-
-  if (!username || !password) {
-    throw new Error(
-      'INSTAGRAM_USERNAME and INSTAGRAM_PASSWORD must be set.\n' +
-      'Add them as GitHub Secrets (Settings → Secrets → Actions).'
-    );
-  }
 
   console.log(`[setup] Logging in as ${username}…`);
 
@@ -112,9 +124,10 @@ module.exports = async () => {
     await page.screenshot({ path: path.join(__dirname, 'login-failed.png') });
     await browser.close();
     throw new Error(
-      '[setup] Username field not found after cookie consent handling.\n' +
-      'Screenshot saved to tests/login-failed.png.\n' +
-      'Instagram may have changed its login page structure.'
+      '[setup] Username field not found — Instagram blocked headless login.\n' +
+      'This usually happens from CI IPs or when Instagram detects automation.\n\n' +
+      'To fix locally:  node tests/setup-auth.js  (opens a real browser)\n' +
+      'For CI: upload a fresh auth.json as a GitHub Secret (INSTAGRAM_AUTH_JSON).'
     );
   }
   await page.fill(usernameSelector, username);
