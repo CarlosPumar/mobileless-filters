@@ -26,6 +26,14 @@ function _mlIsFullscreenReelContainer(el){
     return el.clientHeight>=window.innerHeight*0.85;
 }
 
+// For snap detection only: DM reel overlay can sit below 85% viewport height
+// while still being the vertical snap+video feed (split layout / sheet).
+function _mlIsSnapReelContainerTallEnough(el){
+    if(_mlIsFullscreenReelContainer(el))return true;
+    if(!_mlIsInDMs())return false;
+    return el.clientHeight>=window.innerHeight*0.55;
+}
+
 // Returns true only when children are each roughly viewport-height (reel feed).
 // Used for transform-based and JS-scroll reel containers.
 // Requires at least 2 fullscreen-height children.
@@ -52,6 +60,19 @@ function _mlHasSnapChildren(el){
     return count>=2;
 }
 
+// True when el still looks like the transform-based reel stack (first two
+// children carry Instagram's inline transform-origin reel markup).
+function _mlTransformReelMarkupPresent(el){
+    var ch=el.children;
+    if(ch.length<2)return false;
+    var f=ch[0],s=ch[1];
+    if(!f||!s)return false;
+    var fs=f.getAttribute('style')||'';
+    var ss=s.getAttribute('style')||'';
+    return fs.indexOf('transform-origin: center top')>=0
+        &&ss.indexOf('transform-origin: center top')>=0;
+}
+
 function _mlFindTransformContainer(){
     var divs=document.querySelectorAll('div');
     for(var i=0;i<divs.length;i++){
@@ -76,7 +97,7 @@ function _mlFindSnapContainer(){
         var cs=window.getComputedStyle(divs[i]);
         if(cs.scrollSnapType!=='y mandatory')continue;
         if(divs[i].scrollHeight<=divs[i].clientHeight+50)continue;
-        if(!_mlIsFullscreenReelContainer(divs[i]))continue;
+        if(!_mlIsSnapReelContainerTallEnough(divs[i]))continue;
         if(!_mlHasVideo(divs[i]))continue;
         // Instagram changed reel items from fullscreen to smaller snap-aligned cards.
         // Use snap-align child presence instead of height ratio.
@@ -203,10 +224,11 @@ function _mlLockReels(){
     if(_mlReelObs||_mlReelType==='snap')return;
     // Skip story creation / viewer paths.
     if(_mlIsStoriesPath())return;
-    var tc=null;
-    // Transform-based detection is unsafe in DMs: the message container can
-    // have tall children with transform styles that mimic the reel player.
-    if(!_mlIsInDMs()) tc=_mlFindTransformContainer();
+    // Transform detection runs on /direct/ too: fullscreen reel opened from a
+    // DM often stays on /direct/t/... and uses this stack. The DM *message*
+    // scroller does not use two children with inline transform-origin:center top
+    // (that pattern is specific to the reel player).
+    var tc=_mlFindTransformContainer();
     if(tc){
         _mlReelContainer=tc;
         _mlReelType='transform';
@@ -263,6 +285,14 @@ function _mlIsStoriesPath(){
     return _mlCurrentPath().indexOf('/stories/')===0;
 }
 
+// Height check for periodic unlock: must match how the container was eligible to lock.
+function _mlReelContainerStillTallEnough(){
+    if(!_mlReelContainer)return false;
+    if(_mlReelType==='snap'&&_mlIsInDMs())
+        return _mlIsSnapReelContainerTallEnough(_mlReelContainer);
+    return _mlIsFullscreenReelContainer(_mlReelContainer);
+}
+
 if(window._mlReelLockInterval)clearInterval(window._mlReelLockInterval);
 window._mlReelLockInterval=setInterval(function(){
     if(_mlReelContainer){
@@ -272,9 +302,11 @@ window._mlReelLockInterval=setInterval(function(){
         // For transform/JS-scroll type: use _mlIsReelFeedContainer.
         var stillValid=_mlReelType==='snap'
             ? (_mlHasSnapChildren(_mlReelContainer)||_mlIsReelFeedContainer(_mlReelContainer))
-            : _mlIsReelFeedContainer(_mlReelContainer);
+            : (_mlReelType==='transform'
+                ? (_mlTransformReelMarkupPresent(_mlReelContainer)&&_mlHasVideo(_mlReelContainer))
+                : _mlIsReelFeedContainer(_mlReelContainer));
         var shouldUnlock = !document.contains(_mlReelContainer)
-            || !_mlIsFullscreenReelContainer(_mlReelContainer)
+            || !_mlReelContainerStillTallEnough()
             || !stillValid
             || _mlIsStoriesPath();
         if(shouldUnlock) _mlUnlockReels();
