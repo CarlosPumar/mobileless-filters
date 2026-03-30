@@ -64,6 +64,20 @@ function _mlHasSnapChildren(el){
     return count>=2;
 }
 
+// Same as _mlHasSnapChildren but also checks one level deeper (grandchildren).
+// Instagram's DM reel overlay wraps snap items one extra level:
+//   container (snap-type:y mandatory)
+//     > div (no snap-align)  <- direct child
+//       > div (snap-align:center) <- grandchild (actual reel item)
+function _mlHasSnapDescendants(el){
+    if(_mlHasSnapChildren(el))return true;
+    var ch=el.children;
+    for(var i=0;i<ch.length&&i<5;i++){
+        if(_mlHasSnapChildren(ch[i]))return true;
+    }
+    return false;
+}
+
 // True when el still looks like the transform-based reel stack (first two
 // children carry Instagram's inline transform-origin reel markup).
 function _mlTransformReelMarkupPresent(el){
@@ -104,8 +118,9 @@ function _mlFindSnapContainer(){
         if(!_mlIsSnapReelContainerTallEnough(divs[i]))continue;
         if(!_mlHasVideo(divs[i]))continue;
         // Instagram changed reel items from fullscreen to smaller snap-aligned cards.
-        // Use snap-align child presence instead of height ratio.
-        if(!_mlHasSnapChildren(divs[i]))continue;
+        // Use snap-align presence (direct children or grandchildren) instead of height ratio.
+        // DM reel overlay wraps snap items one extra level deep.
+        if(!_mlHasSnapDescendants(divs[i]))continue;
         return divs[i];
     }
     return null;
@@ -375,7 +390,7 @@ window._mlReelLockInterval=setInterval(function(){
         // For snap type (new Instagram layout): use _mlHasSnapChildren.
         // For transform/JS-scroll type: use _mlIsReelFeedContainer.
         var stillValid=_mlReelType==='snap'
-            ? (_mlHasSnapChildren(_mlReelContainer)
+            ? (_mlHasSnapDescendants(_mlReelContainer)
                ||_mlIsReelFeedContainer(_mlReelContainer)
                ||(_mlTransformReelMarkupPresent(_mlReelContainer)&&_mlHasVideo(_mlReelContainer)))
             : (_mlReelType==='transform'
