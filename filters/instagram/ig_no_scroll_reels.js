@@ -221,19 +221,25 @@ function _mlLockSnap(c){
 }
 
 function _mlLockReels(){
-    if(_mlReelObs||_mlReelType==='snap')return;
-    // Skip story creation / viewer paths.
+    if(_mlReelContainer)return;
     if(_mlIsStoriesPath())return;
-    // Transform detection runs on /direct/ too: fullscreen reel opened from a
-    // DM often stays on /direct/t/... and uses this stack. The DM *message*
-    // scroller does not use two children with inline transform-origin:center top
-    // (that pattern is specific to the reel player).
     var tc=_mlFindTransformContainer();
     if(tc){
-        _mlReelContainer=tc;
-        _mlReelType='transform';
-        _mlInstallSwipeBlocker();
-        _mlLockTransform(tc);
+        var tcs=window.getComputedStyle(tc);
+        // Instagram 2026+: the transform container is also scrollable
+        // (overflowY:scroll, JS-driven scrollTop). Transform-only locking
+        // is insufficient; freeze the scroll as well.
+        if(tcs.overflowY==='scroll'||tcs.overflowY==='auto'){
+            _mlReelContainer=tc;
+            _mlReelType='snap';
+            _mlInstallSwipeBlocker();
+            _mlLockSnap(tc);
+        }else{
+            _mlReelContainer=tc;
+            _mlReelType='transform';
+            _mlInstallSwipeBlocker();
+            _mlLockTransform(tc);
+        }
         return;
     }
     var sc=_mlFindSnapContainer();
@@ -301,7 +307,9 @@ window._mlReelLockInterval=setInterval(function(){
         // For snap type (new Instagram layout): use _mlHasSnapChildren.
         // For transform/JS-scroll type: use _mlIsReelFeedContainer.
         var stillValid=_mlReelType==='snap'
-            ? (_mlHasSnapChildren(_mlReelContainer)||_mlIsReelFeedContainer(_mlReelContainer))
+            ? (_mlHasSnapChildren(_mlReelContainer)
+               ||_mlIsReelFeedContainer(_mlReelContainer)
+               ||(_mlTransformReelMarkupPresent(_mlReelContainer)&&_mlHasVideo(_mlReelContainer)))
             : (_mlReelType==='transform'
                 ? (_mlTransformReelMarkupPresent(_mlReelContainer)&&_mlHasVideo(_mlReelContainer))
                 : _mlIsReelFeedContainer(_mlReelContainer));
