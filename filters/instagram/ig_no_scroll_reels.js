@@ -7,6 +7,9 @@ var _mlReelEvListeners=window._mlReelEvListeners||[];
 var _mlSwipeTouchStart=window._mlSwipeTouchStart||null;
 var _mlSwipeBlocker=window._mlSwipeBlocker||null;
 var _mlSwipeStartListener=window._mlSwipeStartListener||null;
+var _mlPointerStartY=window._mlPointerStartY||null;
+var _mlPointerMoveBlocker=window._mlPointerMoveBlocker||null;
+var _mlPointerDownListener=window._mlPointerDownListener||null;
 
 // Hide only the Reels nav tab so the user cannot navigate to the /reels/ section.
 (function(){
@@ -126,20 +129,21 @@ function _mlFindJsScrollContainer(){
     return null;
 }
 
-// Primary swipe blocker — captures touchmove at document level.
-// Only blocks vertical gestures on the detected reel container.
+// Primary swipe blocker — captures touchmove AND pointermove at document level.
+// Instagram uses pointer events (pointerdown/pointermove) to drive reel animation;
+// blocking only touchmove is not enough.
 function _mlInstallSwipeBlocker(){
     if(_mlSwipeBlocker)return;
     _mlSwipeTouchStart=null;
+    _mlPointerStartY=null;
+
     _mlSwipeStartListener=function(e){
         _mlSwipeTouchStart=e.touches[0].clientY;
     };
     _mlSwipeBlocker=function(e){
         if(_mlSwipeTouchStart===null)return;
         if(_mlIsStoriesPath())return;
-        // If the reel container is gone, self-remove and bail.
         if(!_mlReelContainer){_mlRemoveSwipeBlocker();return;}
-        // Only block gestures that land inside the reel container.
         if(e.target&&!_mlReelContainer.contains(e.target))return;
         var dy=Math.abs(e.changedTouches[0].clientY-_mlSwipeTouchStart);
         if(dy>5){
@@ -147,11 +151,32 @@ function _mlInstallSwipeBlocker(){
             e.stopPropagation();
         }
     };
+    _mlPointerDownListener=function(e){
+        if(e.pointerType!=='touch')return;
+        _mlPointerStartY=e.clientY;
+    };
+    _mlPointerMoveBlocker=function(e){
+        if(e.pointerType!=='touch')return;
+        if(_mlPointerStartY===null)return;
+        if(_mlIsStoriesPath())return;
+        if(!_mlReelContainer){return;}
+        if(e.target&&!_mlReelContainer.contains(e.target))return;
+        var dy=Math.abs(e.clientY-_mlPointerStartY);
+        if(dy>5){
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    };
     document.addEventListener('touchstart',_mlSwipeStartListener,{capture:true,passive:true});
     document.addEventListener('touchmove',_mlSwipeBlocker,{capture:true,passive:false});
+    document.addEventListener('pointerdown',_mlPointerDownListener,{capture:true,passive:true});
+    document.addEventListener('pointermove',_mlPointerMoveBlocker,{capture:true,passive:false});
     window._mlSwipeTouchStart=_mlSwipeTouchStart;
     window._mlSwipeBlocker=_mlSwipeBlocker;
     window._mlSwipeStartListener=_mlSwipeStartListener;
+    window._mlPointerStartY=_mlPointerStartY;
+    window._mlPointerMoveBlocker=_mlPointerMoveBlocker;
+    window._mlPointerDownListener=_mlPointerDownListener;
 }
 
 function _mlRemoveSwipeBlocker(){
@@ -165,8 +190,20 @@ function _mlRemoveSwipeBlocker(){
         _mlSwipeBlocker=null;
         window._mlSwipeBlocker=null;
     }
+    if(_mlPointerDownListener){
+        document.removeEventListener('pointerdown',_mlPointerDownListener,{capture:true});
+        _mlPointerDownListener=null;
+        window._mlPointerDownListener=null;
+    }
+    if(_mlPointerMoveBlocker){
+        document.removeEventListener('pointermove',_mlPointerMoveBlocker,{capture:true});
+        _mlPointerMoveBlocker=null;
+        window._mlPointerMoveBlocker=null;
+    }
     _mlSwipeTouchStart=null;
     window._mlSwipeTouchStart=null;
+    _mlPointerStartY=null;
+    window._mlPointerStartY=null;
 }
 
 function _mlLockTransform(c){
@@ -226,18 +263,20 @@ function _mlLockReels(){
     var tc=_mlFindTransformContainer();
     if(tc){
         var tcs=window.getComputedStyle(tc);
-        // Instagram 2026+: the transform container is also scrollable
-        // (overflowY:scroll, JS-driven scrollTop). Transform-only locking
-        // is insufficient; freeze the scroll as well.
+        _mlReelContainer=tc;
+        _mlInstallSwipeBlocker();
         if(tcs.overflowY==='scroll'||tcs.overflowY==='auto'){
-            _mlReelContainer=tc;
+            // Instagram 2026+: hybrid player. Scroll is JS-driven via
+            // pointer events that update child transforms (not scrollTop).
+            // Apply BOTH locks:
+            // - _mlLockSnap: overflow:hidden + scrollTop freeze (backup)
+            // - _mlLockTransform: MutationObserver to revert transform changes
+            // - _mlInstallSwipeBlocker: blocks touchmove + pointermove
             _mlReelType='snap';
-            _mlInstallSwipeBlocker();
             _mlLockSnap(tc);
+            _mlLockTransform(tc);
         }else{
-            _mlReelContainer=tc;
             _mlReelType='transform';
-            _mlInstallSwipeBlocker();
             _mlLockTransform(tc);
         }
         return;
