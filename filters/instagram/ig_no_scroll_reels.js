@@ -7,9 +7,10 @@ var _mlReelEvListeners=window._mlReelEvListeners||[];
 var _mlSwipeTouchStart=window._mlSwipeTouchStart||null;
 var _mlSwipeBlocker=window._mlSwipeBlocker||null;
 var _mlSwipeStartListener=window._mlSwipeStartListener||null;
-var _mlPointerStartY=window._mlPointerStartY||null;
+var _mlPointerStartYMap=window._mlPointerStartYMap||null;
 var _mlPointerMoveBlocker=window._mlPointerMoveBlocker||null;
 var _mlPointerDownListener=window._mlPointerDownListener||null;
+var _mlPointerUpListener=window._mlPointerUpListener||null;
 
 // Hide only the Reels nav tab so the user cannot navigate to the /reels/ section.
 (function(){
@@ -129,16 +130,26 @@ function _mlFindJsScrollContainer(){
     return null;
 }
 
-// Primary swipe blocker — captures touchmove AND pointermove at document level.
-// Instagram uses pointer events (pointerdown/pointermove) to drive reel animation;
-// blocking only touchmove is not enough.
+// True for touch / pen / unknown primary pointers; false for mouse only.
+function _mlIsNonMousePointer(e){
+    return e.pointerType!=='mouse';
+}
+
+// Primary swipe blocker — window capture phase runs BEFORE document capture.
+// Instagram registers pointer/touch listeners on document early; if we only
+// listen on document we run after them and preventDefault is too late.
+// stopPropagation() on window capture prevents the event reaching document.
 function _mlInstallSwipeBlocker(){
     if(_mlSwipeBlocker)return;
     _mlSwipeTouchStart=null;
-    _mlPointerStartY=null;
+    _mlPointerStartYMap=new Map();
 
     _mlSwipeStartListener=function(e){
-        _mlSwipeTouchStart=e.touches[0].clientY;
+        if(!e.touches||!e.touches.length)return;
+        if(!_mlReelContainer)return;
+        var t=e.touches[0];
+        if(!t.target||!_mlReelContainer.contains(t.target))return;
+        _mlSwipeTouchStart=t.clientY;
     };
     _mlSwipeBlocker=function(e){
         if(_mlSwipeTouchStart===null)return;
@@ -148,62 +159,80 @@ function _mlInstallSwipeBlocker(){
         var dy=Math.abs(e.changedTouches[0].clientY-_mlSwipeTouchStart);
         if(dy>5){
             e.preventDefault();
+            e.stopImmediatePropagation();
             e.stopPropagation();
         }
     };
     _mlPointerDownListener=function(e){
-        if(e.pointerType!=='touch')return;
-        _mlPointerStartY=e.clientY;
+        if(!_mlIsNonMousePointer(e))return;
+        if(!_mlReelContainer||!e.target||!_mlReelContainer.contains(e.target))return;
+        _mlPointerStartYMap.set(e.pointerId,e.clientY);
+    };
+    _mlPointerUpListener=function(e){
+        _mlPointerStartYMap.delete(e.pointerId);
     };
     _mlPointerMoveBlocker=function(e){
-        if(e.pointerType!=='touch')return;
-        if(_mlPointerStartY===null)return;
+        if(!_mlIsNonMousePointer(e))return;
+        if(!_mlPointerStartYMap.has(e.pointerId))return;
         if(_mlIsStoriesPath())return;
-        if(!_mlReelContainer){return;}
+        if(!_mlReelContainer)return;
         if(e.target&&!_mlReelContainer.contains(e.target))return;
-        var dy=Math.abs(e.clientY-_mlPointerStartY);
+        var startY=_mlPointerStartYMap.get(e.pointerId);
+        var dy=Math.abs(e.clientY-startY);
         if(dy>5){
             e.preventDefault();
+            e.stopImmediatePropagation();
             e.stopPropagation();
         }
     };
-    document.addEventListener('touchstart',_mlSwipeStartListener,{capture:true,passive:true});
-    document.addEventListener('touchmove',_mlSwipeBlocker,{capture:true,passive:false});
-    document.addEventListener('pointerdown',_mlPointerDownListener,{capture:true,passive:true});
-    document.addEventListener('pointermove',_mlPointerMoveBlocker,{capture:true,passive:false});
+    var win=window;
+    win.addEventListener('touchstart',_mlSwipeStartListener,{capture:true,passive:true});
+    win.addEventListener('touchmove',_mlSwipeBlocker,{capture:true,passive:false});
+    win.addEventListener('pointerdown',_mlPointerDownListener,{capture:true,passive:true});
+    win.addEventListener('pointermove',_mlPointerMoveBlocker,{capture:true,passive:false});
+    win.addEventListener('pointerup',_mlPointerUpListener,{capture:true,passive:true});
+    win.addEventListener('pointercancel',_mlPointerUpListener,{capture:true,passive:true});
     window._mlSwipeTouchStart=_mlSwipeTouchStart;
     window._mlSwipeBlocker=_mlSwipeBlocker;
     window._mlSwipeStartListener=_mlSwipeStartListener;
-    window._mlPointerStartY=_mlPointerStartY;
+    window._mlPointerStartYMap=_mlPointerStartYMap;
     window._mlPointerMoveBlocker=_mlPointerMoveBlocker;
     window._mlPointerDownListener=_mlPointerDownListener;
+    window._mlPointerUpListener=_mlPointerUpListener;
 }
 
 function _mlRemoveSwipeBlocker(){
+    var win=window;
     if(_mlSwipeStartListener){
-        document.removeEventListener('touchstart',_mlSwipeStartListener,{capture:true});
+        win.removeEventListener('touchstart',_mlSwipeStartListener,{capture:true});
         _mlSwipeStartListener=null;
         window._mlSwipeStartListener=null;
     }
     if(_mlSwipeBlocker){
-        document.removeEventListener('touchmove',_mlSwipeBlocker,{capture:true});
+        win.removeEventListener('touchmove',_mlSwipeBlocker,{capture:true});
         _mlSwipeBlocker=null;
         window._mlSwipeBlocker=null;
     }
     if(_mlPointerDownListener){
-        document.removeEventListener('pointerdown',_mlPointerDownListener,{capture:true});
+        win.removeEventListener('pointerdown',_mlPointerDownListener,{capture:true});
         _mlPointerDownListener=null;
         window._mlPointerDownListener=null;
     }
     if(_mlPointerMoveBlocker){
-        document.removeEventListener('pointermove',_mlPointerMoveBlocker,{capture:true});
+        win.removeEventListener('pointermove',_mlPointerMoveBlocker,{capture:true});
         _mlPointerMoveBlocker=null;
         window._mlPointerMoveBlocker=null;
     }
+    if(_mlPointerUpListener){
+        win.removeEventListener('pointerup',_mlPointerUpListener,{capture:true});
+        win.removeEventListener('pointercancel',_mlPointerUpListener,{capture:true});
+        _mlPointerUpListener=null;
+        window._mlPointerUpListener=null;
+    }
     _mlSwipeTouchStart=null;
     window._mlSwipeTouchStart=null;
-    _mlPointerStartY=null;
-    window._mlPointerStartY=null;
+    _mlPointerStartYMap=null;
+    window._mlPointerStartYMap=null;
 }
 
 function _mlLockTransform(c){
