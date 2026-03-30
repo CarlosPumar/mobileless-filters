@@ -27,9 +27,8 @@ function _mlIsFullscreenReelContainer(el){
 }
 
 // Returns true only when children are each roughly viewport-height (reel feed).
-// A DM message list has many small bubbles — this check prevents locking it.
-// Requires at least 2 fullscreen-height children (a single embedded video
-// thumbnail in a DM doesn't count as a scrollable reel feed).
+// Used for transform-based and JS-scroll reel containers.
+// Requires at least 2 fullscreen-height children.
 function _mlIsReelFeedContainer(el){
     var iH=window.innerHeight;
     var ch=el.children;
@@ -38,6 +37,19 @@ function _mlIsReelFeedContainer(el){
         if(ch[i].getBoundingClientRect().height>=iH*0.7) big++;
     }
     return big>=2;
+}
+
+// Returns true when at least 2 children have scroll-snap-align set.
+// Instagram's new snap-scroll reel player uses smaller (non-fullscreen) items
+// that snap-align, so _mlIsReelFeedContainer no longer works for it.
+function _mlHasSnapChildren(el){
+    var ch=el.children;
+    var count=0;
+    for(var i=0;i<ch.length&&i<10;i++){
+        var cs=window.getComputedStyle(ch[i]);
+        if(cs.scrollSnapAlign&&cs.scrollSnapAlign!=='none') count++;
+    }
+    return count>=2;
 }
 
 function _mlFindTransformContainer(){
@@ -66,7 +78,9 @@ function _mlFindSnapContainer(){
         if(divs[i].scrollHeight<=divs[i].clientHeight+50)continue;
         if(!_mlIsFullscreenReelContainer(divs[i]))continue;
         if(!_mlHasVideo(divs[i]))continue;
-        if(!_mlIsReelFeedContainer(divs[i]))continue;
+        // Instagram changed reel items from fullscreen to smaller snap-aligned cards.
+        // Use snap-align child presence instead of height ratio.
+        if(!_mlHasSnapChildren(divs[i]))continue;
         return divs[i];
     }
     return null;
@@ -74,7 +88,10 @@ function _mlFindSnapContainer(){
 
 // Instagram now implements Reels with overflow-y:scroll + touch-action:none,
 // driving scrollTop via JS. Detect it separately.
+// Never lock in DMs: the message thread container can look identical
+// (fullscreen, overflowY:scroll, video thumbnails) but is not a reel player.
 function _mlFindJsScrollContainer(){
+    if(_mlIsInDMs())return null;
     var divs=document.querySelectorAll('div');
     for(var i=0;i<divs.length;i++){
         var cs=window.getComputedStyle(divs[i]);
@@ -186,7 +203,10 @@ function _mlLockReels(){
     if(_mlReelObs||_mlReelType==='snap')return;
     // Skip story creation / viewer paths.
     if(_mlIsStoriesPath())return;
-    var tc=_mlFindTransformContainer();
+    var tc=null;
+    // Transform-based detection is unsafe in DMs: the message container can
+    // have tall children with transform styles that mimic the reel player.
+    if(!_mlIsInDMs()) tc=_mlFindTransformContainer();
     if(tc){
         _mlReelContainer=tc;
         _mlReelType='transform';
@@ -247,11 +267,15 @@ if(window._mlReelLockInterval)clearInterval(window._mlReelLockInterval);
 window._mlReelLockInterval=setInterval(function(){
     if(_mlReelContainer){
         // Unlock if the container left the DOM, is no longer fullscreen,
-        // or its children are no longer reel-sized (Instagram reused the
-        // container for a DM message list or other non-reel view).
+        // or its children are no longer reel-sized / snap-aligned.
+        // For snap type (new Instagram layout): use _mlHasSnapChildren.
+        // For transform/JS-scroll type: use _mlIsReelFeedContainer.
+        var stillValid=_mlReelType==='snap'
+            ? (_mlHasSnapChildren(_mlReelContainer)||_mlIsReelFeedContainer(_mlReelContainer))
+            : _mlIsReelFeedContainer(_mlReelContainer);
         var shouldUnlock = !document.contains(_mlReelContainer)
             || !_mlIsFullscreenReelContainer(_mlReelContainer)
-            || !_mlIsReelFeedContainer(_mlReelContainer)
+            || !stillValid
             || _mlIsStoriesPath();
         if(shouldUnlock) _mlUnlockReels();
     }
