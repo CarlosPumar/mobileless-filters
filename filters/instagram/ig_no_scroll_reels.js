@@ -1,3 +1,4 @@
+console.log('[ML] reels-script injected path='+window.location.pathname);
 var _mlReelObs=window._mlReelObs||null;
 var _mlReelStyleEl=window._mlReelStyleEl||null;
 var _mlReelContainer=window._mlReelContainer||null;
@@ -313,14 +314,9 @@ function _mlLockReels(){
     if(tc){
         var tcs=window.getComputedStyle(tc);
         _mlReelContainer=tc;
+        console.log('[ML] locking transform inDMs='+_mlIsInDMs()+' h='+tc.clientHeight+' cls='+tc.className.substring(0,60));
         _mlInstallSwipeBlocker();
         if(tcs.overflowY==='scroll'||tcs.overflowY==='auto'){
-            // Instagram 2026+: hybrid player. Scroll is JS-driven via
-            // pointer events that update child transforms (not scrollTop).
-            // Apply BOTH locks:
-            // - _mlLockSnap: overflow:hidden + scrollTop freeze (backup)
-            // - _mlLockTransform: MutationObserver to revert transform changes
-            // - _mlInstallSwipeBlocker: blocks touchmove + pointermove
             _mlReelType='snap';
             _mlLockSnap(tc);
             _mlLockTransform(tc);
@@ -334,6 +330,7 @@ function _mlLockReels(){
     if(sc){
         _mlReelContainer=sc;
         _mlReelType='snap';
+        console.log('[ML] locking snap inDMs='+_mlIsInDMs()+' h='+sc.clientHeight+' cls='+sc.className.substring(0,60));
         _mlInstallSwipeBlocker();
         _mlLockSnap(sc);
         return;
@@ -342,6 +339,7 @@ function _mlLockReels(){
     if(jsc){
         _mlReelContainer=jsc;
         _mlReelType='snap';
+        console.log('[ML] locking jsScroll inDMs='+_mlIsInDMs()+' h='+jsc.clientHeight+' cls='+jsc.className.substring(0,60));
         _mlInstallSwipeBlocker();
         _mlLockSnap(jsc);
         return;

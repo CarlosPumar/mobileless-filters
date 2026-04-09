@@ -115,7 +115,10 @@ function _mlIsPostFeedContainer(el){
 }
 
 function _mlLockPostScroll(el){
+    // Hard guard: never lock scroll in DMs regardless of how this function was reached.
+    if(_mlCurrentPath().indexOf('/direct/')===0)return;
     if(_mlPostScrollLocked.indexOf(el)>=0)return;
+    console.log('[ML] posts-lock path='+_mlCurrentPath()+' h='+el.clientHeight+' scrollH='+el.scrollHeight+' cls='+el.className.substring(0,60));
     _mlPostScrollLocked.push(el);
     var frozenTop=el.scrollTop;
     if(!_mlPostScrollDesc){
@@ -148,6 +151,9 @@ function _mlUnlockAllPostScroll(){
         if(el._mlUnlock)el._mlUnlock();
     });
     _mlPostScrollLocked=[];
+    // Sync window-level reference so the next script injection picks up the
+    // empty array instead of the stale locked-elements array.
+    window._mlPostScrollLocked=_mlPostScrollLocked;
 }
 
 function _mlLockPostScrollContainers(){
@@ -160,6 +166,12 @@ function _mlLockPostScrollContainers(){
 }
 
 // ── Main interval ────────────────────────────────────────────────────────────
+
+console.log('[ML] posts-script injected path='+window.location.pathname);
+
+// Immediate unlock on script injection if we're already in DMs.
+// The interval fires 600ms later; this covers the gap.
+if(_mlCurrentPath().indexOf('/direct/')===0){_mlUnlockAllPostScroll();}
 
 if(window._mlPostScrollInterval)clearInterval(window._mlPostScrollInterval);
 window._mlPostScrollInterval=setInterval(function(){
@@ -176,6 +188,12 @@ window._mlPostScrollInterval=setInterval(function(){
     }
     // /explore/search/, profiles, DMs, etc.
     _mlDeactivateExplore();
+    // Never lock scroll in DMs — message threads with 2+ reel links (/p/ URLs)
+    // would be detected as post feed containers and their scroll frozen.
+    if(_mlCurrentPath().indexOf('/direct/')===0){
+        _mlUnlockAllPostScroll();
+        return;
+    }
     // Don't lock scroll on any Explore sub-page (search results should scroll).
     if(!_mlIsExplorePage()){
         _mlLockPostScrollContainers();
