@@ -30,12 +30,13 @@ function _mlIsFullscreenReelContainer(el){
     return el.clientHeight>=window.innerHeight*0.85;
 }
 
-// For snap detection only: DM reel overlay can sit below 85% viewport height
-// while still being the vertical snap+video feed (split layout / sheet).
+// Require truly fullscreen (≥85% viewport) for snap detection in all cases,
+// including DMs. The old 55%-for-DMs exception was causing the DM message
+// thread container (which contains reel thumbnails) to be matched and locked,
+// blocking scroll through messages. Now we only lock if a fullscreen reel
+// player is open — which is what the user actually "entered".
 function _mlIsSnapReelContainerTallEnough(el){
-    if(_mlIsFullscreenReelContainer(el))return true;
-    if(!_mlIsInDMs())return false;
-    return el.clientHeight>=window.innerHeight*0.55;
+    return _mlIsFullscreenReelContainer(el);
 }
 
 // Returns true only when children are each roughly viewport-height (reel feed).
@@ -374,11 +375,9 @@ function _mlIsStoriesPath(){
     return _mlCurrentPath().indexOf('/stories/')===0;
 }
 
-// Height check for periodic unlock: must match how the container was eligible to lock.
+// Height check for periodic unlock: container must still be fullscreen.
 function _mlReelContainerStillTallEnough(){
     if(!_mlReelContainer)return false;
-    if(_mlReelType==='snap'&&_mlIsInDMs())
-        return _mlIsSnapReelContainerTallEnough(_mlReelContainer);
     return _mlIsFullscreenReelContainer(_mlReelContainer);
 }
 
