@@ -93,6 +93,10 @@ function _mlTransformReelMarkupPresent(el){
 }
 
 function _mlFindTransformContainer(){
+    // The DM reel player is snap-based, never transform-based.
+    // Skip transform detection in DMs to avoid matching message containers
+    // whose children carry transition/animation transforms.
+    if(_mlIsInDMs())return null;
     var divs=document.querySelectorAll('div');
     for(var i=0;i<divs.length;i++){
         if(!_mlIsFullscreenReelContainer(divs[i]))continue;
