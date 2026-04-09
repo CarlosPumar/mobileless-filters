@@ -384,10 +384,6 @@ function _mlReelContainerStillTallEnough(){
 if(window._mlReelLockInterval)clearInterval(window._mlReelLockInterval);
 window._mlReelLockInterval=setInterval(function(){
     if(_mlReelContainer){
-        // Unlock if the container left the DOM, is no longer fullscreen,
-        // or its children are no longer reel-sized / snap-aligned.
-        // For snap type (new Instagram layout): use _mlHasSnapChildren.
-        // For transform/JS-scroll type: use _mlIsReelFeedContainer.
         var stillValid=_mlReelType==='snap'
             ? (_mlHasSnapDescendants(_mlReelContainer)
                ||_mlIsReelFeedContainer(_mlReelContainer)
@@ -395,10 +391,24 @@ window._mlReelLockInterval=setInterval(function(){
             : (_mlReelType==='transform'
                 ? (_mlTransformReelMarkupPresent(_mlReelContainer)&&_mlHasVideo(_mlReelContainer))
                 : _mlIsReelFeedContainer(_mlReelContainer));
-        var shouldUnlock = !document.contains(_mlReelContainer)
-            || !_mlReelContainerStillTallEnough()
-            || !stillValid
-            || _mlIsStoriesPath();
+        var shouldUnlock;
+        if(_mlIsInDMs()){
+            // In DMs the reel player is always snap-based (verified empirically).
+            // Any transform or JS-scroll lock here is stale — it came from a reel
+            // feed the user navigated away from without triggering an unlock.
+            // Release those immediately so DM scroll is never blocked by prior state.
+            // Snap locks are kept only while the container is still fullscreen and
+            // has snap properties (i.e. the DM reel player overlay is still open).
+            shouldUnlock = _mlReelType!=='snap'
+                || !document.contains(_mlReelContainer)
+                || !_mlReelContainerStillTallEnough()
+                || !stillValid;
+        }else{
+            shouldUnlock = !document.contains(_mlReelContainer)
+                || !_mlReelContainerStillTallEnough()
+                || !stillValid
+                || _mlIsStoriesPath();
+        }
         if(shouldUnlock) _mlUnlockReels();
     }
     if(!_mlReelContainer){
