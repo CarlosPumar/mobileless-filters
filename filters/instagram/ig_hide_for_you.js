@@ -96,12 +96,12 @@ function _mlActivate() {
         'right:0',
         'bottom:' + overlayBottom + 'px',
         'z-index:1',
-        'background:#f0f0f0',
+        'background:#000',
         'display:flex',
         'align-items:center',
         'justify-content:center',
         'font-size:15px',
-        'color:#888',
+        'color:#555',
         // pointer-events:none: overlay is purely visual.
         // Scroll prevention is not needed because display:none on the feed
         // container collapses the page height to near-zero.
