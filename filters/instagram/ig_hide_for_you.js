@@ -96,7 +96,6 @@ function _mlActivate() {
         'right:0',
         'bottom:' + overlayBottom + 'px',
         'z-index:1',
-        'background:#000',
         'display:flex',
         'align-items:center',
         'justify-content:center',
