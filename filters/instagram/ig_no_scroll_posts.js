@@ -37,6 +37,19 @@ function _mlIsExplorePage(){
     return _mlCurrentPath().indexOf('/explore')===0;
 }
 
+// True for any post detail or post-comments page:
+//   /p/<id>/                — post detail
+//   /p/<id>/comments/       — comments list
+//   /<user>/p/<id>/         — post detail viewed from a profile context
+//   /<user>/p/<id>/comments/
+// These pages surface "X likes" links shaped like /p/<id>/c/<commentId>/liked_by/.
+// Our post-feed detector counts a[href*="/p/"] occurrences, so on a comments page
+// with many comments it treats the comments scroller as a post feed and locks it,
+// preventing the user from scrolling through comments.
+function _mlIsPostDetailPath(){
+    return /\/p\/[^/]+/.test(_mlCurrentPath());
+}
+
 function _mlIsExploreGrid(){
     // Only block the base Explore recommendations page (/explore or /explore/).
     // _mlCurrentPath strips trailing slashes so /explore/ → '/explore'.
@@ -117,6 +130,8 @@ function _mlIsPostFeedContainer(el){
 function _mlLockPostScroll(el){
     // Hard guard: never lock scroll in DMs regardless of how this function was reached.
     if(_mlCurrentPath().indexOf('/direct/')===0)return;
+    // Hard guard: never lock scroll on a post detail / comments page.
+    if(_mlIsPostDetailPath())return;
     if(_mlPostScrollLocked.indexOf(el)>=0)return;
     console.log('[ML] posts-lock path='+_mlCurrentPath()+' h='+el.clientHeight+' scrollH='+el.scrollHeight+' cls='+el.className.substring(0,60));
     _mlPostScrollLocked.push(el);
@@ -169,9 +184,9 @@ function _mlLockPostScrollContainers(){
 
 console.log('[ML] posts-script injected path='+window.location.pathname);
 
-// Immediate unlock on script injection if we're already in DMs.
+// Immediate unlock on script injection if we're already in DMs or on a post page.
 // The interval fires 600ms later; this covers the gap.
-if(_mlCurrentPath().indexOf('/direct/')===0){_mlUnlockAllPostScroll();}
+if(_mlCurrentPath().indexOf('/direct/')===0||_mlIsPostDetailPath()){_mlUnlockAllPostScroll();}
 
 if(window._mlPostScrollInterval)clearInterval(window._mlPostScrollInterval);
 window._mlPostScrollInterval=setInterval(function(){
@@ -191,6 +206,14 @@ window._mlPostScrollInterval=setInterval(function(){
     // Never lock scroll in DMs — message threads with 2+ reel links (/p/ URLs)
     // would be detected as post feed containers and their scroll frozen.
     if(_mlCurrentPath().indexOf('/direct/')===0){
+        _mlUnlockAllPostScroll();
+        return;
+    }
+    // Never lock scroll on a post detail / comments page. The comments list
+    // contains many "X likes" links (/p/<id>/c/<commentId>/liked_by/) that
+    // match a[href*="/p/"], which would otherwise make the comments scroller
+    // pass _mlIsPostFeedContainer and get frozen.
+    if(_mlIsPostDetailPath()){
         _mlUnlockAllPostScroll();
         return;
     }
