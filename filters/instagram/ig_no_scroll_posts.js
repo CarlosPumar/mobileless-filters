@@ -188,8 +188,11 @@ console.log('[ML] posts-script injected path='+window.location.pathname);
 // The interval fires 600ms later; this covers the gap.
 if(_mlCurrentPath().indexOf('/direct/')===0||_mlIsPostDetailPath()){_mlUnlockAllPostScroll();}
 
-if(window._mlPostScrollInterval)clearInterval(window._mlPostScrollInterval);
-window._mlPostScrollInterval=setInterval(function(){
+if(window._mlPostScrollInterval){
+    clearInterval(window._mlPostScrollInterval);
+    window._mlPostScrollInterval=null;
+}
+window._mlSchedule('postScroll', function(){
     if(_mlIsMainFeed()){
         _mlUnlockAllPostScroll();
         _mlDeactivateExplore();
@@ -221,4 +224,4 @@ window._mlPostScrollInterval=setInterval(function(){
     if(!_mlIsExplorePage()){
         _mlLockPostScrollContainers();
     }
-},600);
+});

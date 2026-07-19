@@ -383,8 +383,11 @@ function _mlReelContainerStillTallEnough(){
     return _mlIsFullscreenReelContainer(_mlReelContainer);
 }
 
-if(window._mlReelLockInterval)clearInterval(window._mlReelLockInterval);
-window._mlReelLockInterval=setInterval(function(){
+if(window._mlReelLockInterval){
+    clearInterval(window._mlReelLockInterval);
+    window._mlReelLockInterval=null;
+}
+window._mlSchedule('reelLock', function(){
     if(_mlReelContainer){
         var stillValid=_mlReelType==='snap'
             ? (_mlHasSnapDescendants(_mlReelContainer)
@@ -416,4 +419,4 @@ window._mlReelLockInterval=setInterval(function(){
     if(!_mlReelContainer){
         _mlLockReels();
     }
-},500);
+});

@@ -121,11 +121,14 @@ function _mlDeactivate() {
     if (o && o.parentNode) o.parentNode.removeChild(o);
 }
 
-if(window._mlForYouInterval)clearInterval(window._mlForYouInterval);
-window._mlForYouInterval=setInterval(function() {
+if(window._mlForYouInterval){
+    clearInterval(window._mlForYouInterval);
+    window._mlForYouInterval=null;
+}
+window._mlSchedule('forYou', function() {
     if (_mlIsMainFeed() && _mlIsLoggedIn()) {
         _mlActivate();
     } else {
         _mlDeactivate();
     }
-}, 600);
+});

@@ -1,3 +1,67 @@
+// Planificador compartido. Se define aquí porque baseline.js se inyecta
+// siempre, y antes que cualquier filtro (ver `baselineJs` en manifest.json).
+//
+// Sustituye al sondeo con setInterval que usaba cada filtro. Motivo: Instagram
+// es una SPA, así que entre cambio y cambio no hay nada que hacer, pero los
+// timers seguían recorriendo el DOM dos veces por segundo indefinidamente.
+// Con un MutationObserver el trabajo ocurre sólo cuando el DOM cambia de
+// verdad, y además reacciona en el acto en vez de esperar al siguiente tick.
+(function(){
+    if(window._mlSchedule)return;
+
+    // Durante el scroll Instagram genera ráfagas de mutaciones; sin este
+    // límite reaccionaríamos decenas de veces por segundo, que es peor que el
+    // sondeo que venimos a sustituir. Con 250 ms seguimos siendo más rápidos
+    // que los 500-600 ms de antes, pero acotamos el pico.
+    var MIN_GAP=250;
+
+    var tasks={};
+    var timer=null;
+    var lastRun=0;
+    var observer=null;
+
+    function runAll(){
+        timer=null;
+        lastRun=Date.now();
+        for(var k in tasks){
+            if(!Object.prototype.hasOwnProperty.call(tasks,k))continue;
+            // Un filtro que falle no debe impedir que corran los demás.
+            try{tasks[k]();}catch(e){}
+        }
+    }
+
+    function request(){
+        if(timer)return;
+        var wait=Math.max(0,MIN_GAP-(Date.now()-lastRun));
+        timer=setTimeout(runAll,wait);
+    }
+
+    function ensureObserver(){
+        if(observer||!document.documentElement)return;
+        observer=new MutationObserver(request);
+        observer.observe(document.documentElement,{childList:true,subtree:true});
+    }
+
+    // La clave permite reemplazar la tarea si el script se reinyecta, en vez
+    // de acumular duplicados.
+    window._mlSchedule=function(key,fn){
+        tasks[key]=fn;
+        ensureObserver();
+        request();
+    };
+
+    // Red de seguridad para lo que no pasa por el observer: navegaciones de la
+    // SPA que no tocan el DOM al instante, y el arranque si el observer se
+    // instala tarde. Un tick lento basta, el observer hace el trabajo fino.
+    if(window._mlSafetyNet)clearInterval(window._mlSafetyNet);
+    window._mlSafetyNet=setInterval(request,2000);
+
+    if(!document.documentElement){
+        document.addEventListener('DOMContentLoaded',ensureObserver);
+    }
+    ensureObserver();
+})();
+
 (function(){
     function _mlHideAppBanners(){
         // 1. Hide full-screen fixed overlays that contain "Open in app" modals
@@ -70,7 +134,9 @@
             }
         });
     }
-    _mlHideAppBanners();
-    if(window._mlBaselineInterval)clearInterval(window._mlBaselineInterval);
-    window._mlBaselineInterval=setInterval(_mlHideAppBanners,2000);
+    if(window._mlBaselineInterval){
+        clearInterval(window._mlBaselineInterval);
+        window._mlBaselineInterval=null;
+    }
+    window._mlSchedule('baseline',_mlHideAppBanners);
 })();
