@@ -1,0 +1,14 @@
+{
+  "androidPackage": "com.zhiliaoapp.musically",
+  "iosBundleId": "com.zhiliaoapp.musically",
+  "appName": "TikTok",
+  "url": "https://www.tiktok.com",
+  "baselineJs": "baseline.js",
+  "filters": [
+    {
+      "id": "tt_hide_foryou",
+      "nameKey": "filter_tt_hide_foryou",
+      "js": "tt_hide_foryou.js"
+    }
+  ]
+}
