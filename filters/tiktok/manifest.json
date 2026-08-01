@@ -6,9 +6,14 @@
   "baselineJs": "baseline.js",
   "filters": [
     {
-      "id": "tt_hide_foryou",
-      "nameKey": "filter_tt_hide_foryou",
-      "js": "tt_hide_foryou.js"
+      "id": "tt_hide_home",
+      "nameKey": "filter_tt_hide_home",
+      "js": "tt_hide_home.js"
+    },
+    {
+      "id": "tt_hide_trending",
+      "nameKey": "filter_tt_hide_trending",
+      "js": "tt_hide_trending.js"
     }
   ]
 }
