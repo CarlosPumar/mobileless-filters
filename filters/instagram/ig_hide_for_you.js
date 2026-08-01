@@ -99,8 +99,10 @@ function _mlActivate() {
         'display:flex',
         'align-items:center',
         'justify-content:center',
-        'font-size:15px',
-        'color:#555',
+        'font-family:-apple-system,BlinkMacSystemFont,system-ui,Roboto,Helvetica,Arial,sans-serif',
+        'font-size:16px',
+        'font-weight:400',
+        'color:#888',
         // pointer-events:none: overlay is purely visual.
         // Scroll prevention is not needed because display:none on the feed
         // container collapses the page height to near-zero.
