@@ -19,6 +19,46 @@ function _mlIsMainFeed() {
     return p === '/' || p === '';
 }
 
+// La CSS temprana que inyecta la app (`#ml-early-hide`) esconde `main article`
+// en la ruta "/" para que el feed no llegue a parpatear antes de que corra este
+// script. Esa hoja se decide sólo por la ruta: se inyecta en document-start,
+// cuando todavía no hay DOM, así que no puede saber si hay sesión.
+//
+// Sin sesión, "/" no es el feed — es la pantalla de entrar, y también vive
+// dentro de `main article`. Resultado: la pantalla de login se quedaba en
+// negro y sin poder hacer scroll.
+//
+// Aquí sí se sabe si hay sesión, así que se añade una hoja propia, después de
+// la suya, que revierte exactamente esas dos reglas mientras no la haya.
+var _ML_UNHIDE_ID = 'ml-for-you-unhide';
+var _ML_UNHIDE_CSS = 'main article{visibility:visible!important}html,body{overflow:auto!important}';
+
+function _mlEarlyUnhide(enabled) {
+    var s = document.getElementById(_ML_UNHIDE_ID);
+
+    if (!enabled) {
+        if (s && s.parentNode) s.parentNode.removeChild(s);
+        return;
+    }
+
+    var root = document.head || document.documentElement;
+    if (!root) return;
+
+    if (!s) {
+        s = document.createElement('style');
+        s.id = _ML_UNHIDE_ID;
+        s.textContent = _ML_UNHIDE_CSS;
+    }
+
+    // Tiene que quedar DESPUÉS de `#ml-early-hide`: misma especificidad y las
+    // dos con !important, así que gana la última del documento.
+    var early = document.getElementById('ml-early-hide');
+    var isBeforeEarly = early &&
+        (early.compareDocumentPosition(s) & Node.DOCUMENT_POSITION_PRECEDING) !== 0;
+
+    if (s.parentNode !== root || isBeforeEarly) root.appendChild(s);
+}
+
 function _mlIsLoggedIn() {
     if (document.querySelector('a[href="/u/profile/"]')) return false;
     if (document.querySelector('a[href*="accounts/login"], a[href*="accounts/emailsignup"]')) return false;
@@ -123,11 +163,19 @@ function _mlDeactivate() {
     if (o && o.parentNode) o.parentNode.removeChild(o);
 }
 
-if(window._mlForYouInterval)clearInterval(window._mlForYouInterval);
-window._mlForYouInterval=setInterval(function() {
-    if (_mlIsMainFeed() && _mlIsLoggedIn()) {
+if(window._mlForYouInterval){
+    clearInterval(window._mlForYouInterval);
+    window._mlForYouInterval=null;
+}
+window._mlSchedule('forYou', function() {
+    var onFeedPath = _mlIsMainFeed();
+    var loggedIn = _mlIsLoggedIn();
+
+    _mlEarlyUnhide(onFeedPath && !loggedIn);
+
+    if (onFeedPath && loggedIn) {
         _mlActivate();
     } else {
         _mlDeactivate();
     }
-}, 600);
+});
