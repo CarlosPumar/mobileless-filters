@@ -119,6 +119,96 @@ test.describe('yt_hide_shorts filter', () => {
     expect(allShortsHidden).toBe(true);
   });
 
+  // ─── 3b. Subscriptions: reel shelf hidden ────────────────────────────────
+
+  // The real Subscriptions feed needs a signed-in account. We simulate the
+  // path with pushState and inject a synthetic Shorts reel shelf shaped like
+  // YouTube's markup, then confirm the filter hides it while leaving a normal
+  // video section alone.
+  test('hides the Shorts reel shelf on /feed/subscriptions (synthetic)', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'networkidle' });
+
+    await page.evaluate(() => {
+      history.pushState({}, '', '/feed/subscriptions');
+
+      const host = document.querySelector('ytm-browse') || document.body;
+
+      // A Shorts-only section (should be hidden, shelf + wrapper).
+      const shortsSection = document.createElement('ytm-item-section-renderer');
+      shortsSection.id = 'ml-test-shorts-section';
+      const shelf = document.createElement('ytm-reel-shelf-renderer');
+      shelf.id = 'ml-test-reel-shelf';
+      shortsSection.appendChild(shelf);
+      host.appendChild(shortsSection);
+
+      // A normal-video section (must stay visible).
+      const videoSection = document.createElement('ytm-item-section-renderer');
+      videoSection.id = 'ml-test-video-section';
+      videoSection.appendChild(document.createElement('ytm-video-with-context-renderer'));
+      host.appendChild(videoSection);
+    });
+
+    await injectFilter(page);
+    await page.waitForTimeout(1_500);
+
+    const state = await page.evaluate(() => {
+      const disp = (id) => {
+        const el = document.getElementById(id);
+        return el ? window.getComputedStyle(el).display : 'MISSING';
+      };
+      return {
+        shelf: disp('ml-test-reel-shelf'),
+        shortsSection: disp('ml-test-shorts-section'),
+        videoSection: disp('ml-test-video-section'),
+      };
+    });
+    expect(state.shelf).toBe('none');
+    expect(state.shortsSection).toBe('none');
+    expect(state.videoSection).not.toBe('none');
+  });
+
+  // ─── 3c. Subscriptions: content-signal fallback (/shorts/ link) ──────────
+
+  // Guards against layout variants we can't inspect logged-out: a Shorts item
+  // is identified by its /shorts/ link and its lockup element, even inside a
+  // wrapper tag we don't explicitly target.
+  test('hides Shorts by /shorts/ link + lockup on /feed/subscriptions (synthetic)', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'networkidle' });
+
+    await page.evaluate(() => {
+      history.pushState({}, '', '/feed/subscriptions');
+      const host = document.querySelector('ytm-browse') || document.body;
+
+      // Real structure from the live Subscriptions feed: a rich shelf whose
+      // items are ytm-shorts-lockup-view-model-v2 > ytm-shorts-lockup-view-model
+      // > a[href^="/shorts/"].
+      const shortsSection = document.createElement('ytm-rich-shelf-renderer');
+      shortsSection.id = 'ml-test-href-section';
+      const lockup = document.createElement('ytm-shorts-lockup-view-model-v2');
+      lockup.id = 'ml-test-lockup';
+      const inner = document.createElement('ytm-shorts-lockup-view-model');
+      const link = document.createElement('a');
+      link.href = '/shorts/abc123';
+      inner.appendChild(link);
+      lockup.appendChild(inner);
+      shortsSection.appendChild(lockup);
+      host.appendChild(shortsSection);
+    });
+
+    await injectFilter(page);
+    await page.waitForTimeout(1_500);
+
+    const state = await page.evaluate(() => {
+      const disp = (id) => {
+        const el = document.getElementById(id);
+        return el ? window.getComputedStyle(el).display : 'MISSING';
+      };
+      return { section: disp('ml-test-href-section'), lockup: disp('ml-test-lockup') };
+    });
+    // Either the section is hidden wholesale, or at minimum the lockup itself is.
+    expect(state.section === 'none' || state.lockup === 'none').toBe(true);
+  });
+
   // ─── 4. /shorts/*: NO fullscreen overlay (user can watch current Short) ──
 
   test('does NOT show fullscreen overlay on /shorts/ (allows watching)', async ({ page }) => {

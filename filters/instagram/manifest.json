@@ -19,6 +19,11 @@
       "id": "ig_hide_for_you",
       "nameKey": "filter_ig_hide_for_you",
       "js": "ig_hide_for_you.js"
+    },
+    {
+      "id": "ig_hide_stories",
+      "nameKey": "filter_ig_hide_stories",
+      "js": "ig_hide_stories.js"
     }
   ]
 }

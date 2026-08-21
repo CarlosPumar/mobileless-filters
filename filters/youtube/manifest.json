@@ -14,6 +14,11 @@
       "id": "yt_hide_shorts",
       "nameKey": "filter_yt_hide_shorts",
       "js": "yt_hide_shorts.js"
+    },
+    {
+      "id": "yt_hide_subscriptions",
+      "nameKey": "filter_yt_hide_subscriptions",
+      "js": "yt_hide_subscriptions.js"
     }
   ]
 }
